@@ -1,6 +1,6 @@
-# Contexto Geral do Projeto e Histórico de Desenvolvimento
+# Contexto do Projeto e Playbook Operacional
 
-Este documento unifica **100% do contexto técnico, arquitetura e histórico de decisões** do projeto **QA Onboarding Automation**, servindo de guia completo para desenvolvedores, analistas de QA e assistentes de IA em qualquer computador.
+Este documento unifica **100% do contexto técnico, arquitetura, histórico e o Playbook Operacional** do projeto **QA Onboarding Automation**, servindo de guia completo para desenvolvedores, analistas de QA e assistentes de IA em qualquer computador.
 
 ---
 
@@ -15,54 +15,76 @@ Este documento unifica **100% do contexto técnico, arquitetura e histórico de 
 
 ---
 
-## 2. Linha do Tempo e Decisões de Engenharia
+## 2. Playbook Operacional (Onde um Complementa o Outro)
 
-### 2.1. Arquitetura Modular
-O framework foi organizado em camadas desacopladas:
-* `config/settings.py`: Centralização de parâmetros, `.env` e seletores da UI (preferência por `data-testid`).
-* `core/adspower.py`: Cliente HTTP assíncrono para os endpoints oficiais do AdsPower (`/status`, `/api/v1/browser/active`, `/api/v1/browser/start`, `/api/v1/browser/stop`).
-* `core/browser_manager.py`: Gerenciamento do ciclo de vida das sessões Playwright (CDP ou Local).
-* `core/csv_loader.py`: Ingestão de `data/usuarios.csv`, validação rigorosa de campos obrigatórios, formato de e-mail e duplicidades.
-* `core/onboarding.py`: Execução da automação com esperas explícitas, medição de tempo e screenshots apenas em falhas (`logs/screenshots/`).
-* `core/executor.py`: Orquestrador concorrente (`asyncio.Semaphore`), fila de tarefas, pacing (`RATE_LIMIT_DELAY`) e retentativas automáticas (`MAX_RETRIES`).
-* `core/reporter.py`: Logs rotativos de 5MB (`logs/qa_execution.log`), relatórios detalhados em CSV (`reports/resultados.csv`) e consolidado estatístico em JSON (`reports/resumo.json`).
-* `main.py`: CLI interativo com interface Rich e barra de progresso em tempo real.
-* `tests/`: 17 testes automatizados com `pytest` e servidor mock (`tests/mock_server.py`).
+O framework funciona como uma esteira contínua, onde o resultado de cada módulo é o insumo indispensável para o próximo:
 
-### 2.2. Depuração e Problemas Resolvidos
-1. **`TypeError: unhashable type: 'BrowserSession'`:**
-   * Ajustada a dataclass com `@dataclass(eq=False)` em `core/browser_manager.py`, permitindo rastrear as instâncias abertas em conjuntos (`set`) para encerramento seguro.
-2. **Compatibilidade com Perfis AdsPower (`serial_number` vs `user_id`):**
-   * O cliente `core/adspower.py` detecta automaticamente se o identificador informado no CSV é numérico (passando `serial_number=X`) ou alfanumérico (passando `user_id=X`), permitindo usar diretamente o número exibido na coluna **`Nº`** do AdsPower (ex: perfil `1`).
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   ARQUITETURA COMPLEMENTAR                                     │
+├────────────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                │
+│   ETAPA 1: csv_loader.py (A Base dos Dados)                                                    │
+│   └── Lê data/usuarios.csv, sanitiza os e-mails, valida duplicidades e mascara senhas.         │
+│       │                                                                                        │
+│       ▼ Entrega lista de UserData tipados e validados                                          │
+│                                                                                                │
+│   ETAPA 2: executor.py (O Maestro da Concorrência)                                             │
+│   └── Pega a lista do CSV, enfileira tarefas e gerencia o semáforo de concorrência.            │
+│       │                                                                                        │
+│       ▼ Para cada usuário, solicita uma sessão isolada                                         │
+│                                                                                                │
+│   ETAPA 3: browser_manager.py & adspower.py (A Infraestrutura de Navegação)                    │
+│   └── No modo AdsPower: chama a API local, abre o perfil (ex: nº 1) e extrai o WebSocket.      │
+│   └── No modo Local: lança Chromium nativo do Playwright para testes rápidos.                  │
+│       │                                                                                        │
+│       ▼ Entrega uma instância de Page ativa e conectada                                        │
+│                                                                                                │
+│   ETAPA 4: onboarding.py (A Execução na Interface Web)                                         │
+│   └── Acessa a URL do seu domínio, preenche nome/email/senha, submete e afere o resultado.     │
+│   └── Se houver erro ou timeout, tira print de auditoria e fecha a aba.                        │
+│       │                                                                                        │
+│       ▼ Retorna ExecutionResult com status (SUCCESS, FAILED, TIMEOUT) e tempo em ms            │
+│                                                                                                │
+│   ETAPA 5: reporter.py (A Inteligência Estatística de QA)                                      │
+│   └── Registra no log rotativo, calcula o percentil 95 (p95) e grava resultados.csv e resumo. │
+│                                                                                                │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Como a Esteira se Complementa na Prática:
+1. **Dados alimentam a Automação:** `csv_loader.py` bloqueia e-mails errados antes de abrir qualquer navegador, economizando memória.
+2. **Concorrência protege o Servidor:** `executor.py` dosa quantos navegadores rodam juntos e dá pausas (`RATE_LIMIT_DELAY`) para o site não travar.
+3. **AdsPower complementa o Playwright:** O AdsPower gerencia as impressões digitais dos perfis, enquanto o Playwright comanda as ações da tela via CDP em alta velocidade.
+4. **Screenshots complementam os Logs:** Quando um cadastro falha, o log diz a mensagem de erro e a pasta `logs/screenshots/` guarda a imagem exata da tela no instante da falha para auditoria visual.
+5. **Métricas complementam a Tomada de Decisão:** `reports/resumo.json` entrega o **Percentil 95 (p95)** para os desenvolvedores saberem a velocidade real do sistema sob estresse.
 
 ---
 
-## 3. Dúvidas Operacionais Resolvidas
+## 3. Matriz de Trabalho em Equipe (Divisão de Papéis)
+
+| Papel | Responsabilidade Principal | Arquivos Envolvidos |
+| :--- | :--- | :--- |
+| **Operador de Dados / QA** | Define a lista de e-mails, domínios e senhas a testar | `data/usuarios.csv` |
+| **Engenheiro de Automação** | Ajusta seletores dos botões e campos se o site mudar | `config/settings.py`, `core/onboarding.py` |
+| **Operador de Infraestrutura** | Abre os perfis do AdsPower e configura portas de API | `.env`, AdsPower Local API |
+| **Líder Técnico / Gestor** | Analisa o relatório consolidado de métricas e p95 | `reports/resumo.json`, `reports/resultados.csv` |
+
+---
+
+## 4. Dúvidas Operacionais e Configurações
 
 * **Onde ativar a Local API no AdsPower (macOS):**
-  * No menu superior do Mac: `Adspower global` ➔ `Preferências...` (ou atalho `Cmd + ,`), aba **Local API** ➔ ativar chave seletora ➔ confirmar porta `50325`.
+  * Menu superior do Mac: `Adspower global` ➔ `Preferências...` (ou atalho `Cmd + ,`), aba **Local API** ➔ ativar chave seletora ➔ confirmar porta `50325`.
   * Ou no canto superior direito da janela do AdsPower: clicar no avatar do usuário ➔ `Configurações` ➔ aba `Local API`.
 * **Identificador de Perfil:**
-  * O número que aparece na coluna **`Nº`** (ex: `1`) pode ser colocado diretamente no arquivo `data/usuarios.csv`.
+  * O número que aparece na coluna **`Nº`** (ex: `1`) pode ser colocado diretamente no arquivo `data/usuarios.csv`. O código detecta se é número e envia `serial_number=1` automaticamente.
 * **Criação de Contas no Próprio Domínio:**
-  * O framework está pronto para preencher formulários web no domínio desejado, bastando configurar a variável `ONBOARDING_URL` no `.env`.
+  * Basta configurar a variável `ONBOARDING_URL` no `.env` apontando para o link de cadastro do seu domínio.
 
 ---
 
-## 4. Métricas e Testes Já Validados
-
-1. **Suite Pytest:**
-   * 17 testes executados com 100% de sucesso (`tests/test_csv_loader.py`, `tests/test_adspower.py` e `tests/test_onboarding.py`).
-2. **Execução E2E ao Vivo:**
-   * Executado contra servidor local de teste com concorrência de 2 workers:
-     * Taxa de sucesso: 100.0%
-     * Tempo médio por cadastro: ~3.4 segundos.
-     * Percentil 95 (p95): ~4.0 segundos.
-     * Relatórios CSV e JSON gerados com sucesso.
-
----
-
-## 5. Como Rodar em Outro Computador (Passo a Passo)
+## 5. Como Rodar em Qualquer Computador
 
 ```bash
 # 1. Clonar o repositório
