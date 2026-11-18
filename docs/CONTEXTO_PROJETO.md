@@ -1,12 +1,12 @@
-# Contexto do Projeto e Playbook Operacional
+# Contexto do Projeto, Playbook e Especificação M2M
 
-Este documento unifica **100% do contexto técnico, arquitetura, histórico e o Playbook Operacional** do projeto **QA Onboarding Automation**, servindo de guia completo para desenvolvedores, analistas de QA e assistentes de IA em qualquer computador.
+Este documento unifica **100% do contexto técnico, arquitetura, histórico, Playbook Operacional e Contrato de Integração Sistema-a-Sistema (M2M)** do projeto **QA Onboarding Automation**, servindo de guia completo tanto para humanos quanto para outros sistemas, orquestradores e assistentes de IA.
 
 ---
 
 ## 1. Visão Geral e Propósito
 
-* **Objetivo:** Framework profissional em Python 3.11+ para testes de QA, carga e confiabilidade no fluxo de onboarding/registro de aplicações web.
+* **Objetivo:** Framework profissional em Python 3.11+ para automação de onboarding, testes de carga e validação de confiabilidade de aplicações web.
 * **Modo Híbrido:**
   * **AdsPower Local API:** Conexão direta via Chrome DevTools Protocol (CDP) aos perfis do AdsPower.
   * **Playwright Local:** Execução isolada em Chromium nativo, permitindo testes sem depender do AdsPower aberto.
@@ -17,39 +17,12 @@ Este documento unifica **100% do contexto técnico, arquitetura, histórico e o 
 
 ## 2. Playbook Operacional (Onde um Complementa o Outro)
 
-O framework funciona como uma esteira contínua, onde o resultado de cada módulo é o insumo indispensável para o próximo:
-
 ```
-┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   ARQUITETURA COMPLEMENTAR                                     │
-├────────────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                                │
-│   ETAPA 1: csv_loader.py (A Base dos Dados)                                                    │
-│   └── Lê data/usuarios.csv, sanitiza os e-mails, valida duplicidades e mascara senhas.         │
-│       │                                                                                        │
-│       ▼ Entrega lista de UserData tipados e validados                                          │
-│                                                                                                │
-│   ETAPA 2: executor.py (O Maestro da Concorrência)                                             │
-│   └── Pega a lista do CSV, enfileira tarefas e gerencia o semáforo de concorrência.            │
-│       │                                                                                        │
-│       ▼ Para cada usuário, solicita uma sessão isolada                                         │
-│                                                                                                │
-│   ETAPA 3: browser_manager.py & adspower.py (A Infraestrutura de Navegação)                    │
-│   └── No modo AdsPower: chama a API local, abre o perfil (ex: nº 1) e extrai o WebSocket.      │
-│   └── No modo Local: lança Chromium nativo do Playwright para testes rápidos.                  │
-│       │                                                                                        │
-│       ▼ Entrega uma instância de Page ativa e conectada                                        │
-│                                                                                                │
-│   ETAPA 4: onboarding.py (A Execução na Interface Web)                                         │
-│   └── Acessa a URL do seu domínio, preenche nome/email/senha, submete e afere o resultado.     │
-│   └── Se houver erro ou timeout, tira print de auditoria e fecha a aba.                        │
-│       │                                                                                        │
-│       ▼ Retorna ExecutionResult com status (SUCCESS, FAILED, TIMEOUT) e tempo em ms            │
-│                                                                                                │
-│   ETAPA 5: reporter.py (A Inteligência Estatística de QA)                                      │
-│   └── Registra no log rotativo, calcula o percentil 95 (p95) e grava resultados.csv e resumo. │
-│                                                                                                │
-└────────────────────────────────────────────────────────────────────────────────────────────────┘
+[1. Massa de Dados] ──> [2. Gestão de Navegador] ──> [3. Automação de Tela] ──> [4. Orquestração] ──> [5. Relatórios & Métricas]
+   (csv_loader)             (browser_manager)              (onboarding)              (executor)                 (reporter)
+        │                          │                            │                        │                           │
+  Valida e mascara          Abre via AdsPower            Preenche campos e        Controla fila,             Calcula p95, gera
+    credenciais              (CDP) ou Local              valida confirmação        concorrência e retries     CSV e JSON
 ```
 
 ### Como a Esteira se Complementa na Prática:
@@ -61,14 +34,69 @@ O framework funciona como uma esteira contínua, onde o resultado de cada módul
 
 ---
 
-## 3. Matriz de Trabalho em Equipe (Divisão de Papéis)
+## 3. Especificação de Integração Sistema-a-Sistema (M2M Contract)
 
-| Papel | Responsabilidade Principal | Arquivos Envolvidos |
-| :--- | :--- | :--- |
-| **Operador de Dados / QA** | Define a lista de e-mails, domínios e senhas a testar | `data/usuarios.csv` |
-| **Engenheiro de Automação** | Ajusta seletores dos botões e campos se o site mudar | `config/settings.py`, `core/onboarding.py` |
-| **Operador de Infraestrutura** | Abre os perfis do AdsPower e configura portas de API | `.env`, AdsPower Local API |
-| **Líder Técnico / Gestor** | Analisa o relatório consolidado de métricas e p95 | `reports/resumo.json`, `reports/resultados.csv` |
+Para que outro sistema, bot, IA ou orquestrador automatizado converse com este framework:
+
+### 3.1. Acoplamento via CLI / Subprocess
+```bash
+python main.py \
+  --csv /caminho/para/dados.csv \
+  --url https://seu-dominio.com/register \
+  --concurrency 2 \
+  --timeout 10000 \
+  --use-adspower
+```
+* **Códigos de Saída (Exit Codes):**
+  * `0`: Sucesso total (todos os registros processados com 0 falhas).
+  * `1`: Ocorreu falha funcional (`FAILED`) ou timeout (`TIMEOUT`).
+  * `130`: Interrompido por sinal SIGINT/SIGTERM (encerramento gracioso).
+
+### 3.2. Contrato de Entrada (Input Payload - CSV)
+O sistema gerador deve alimentar o arquivo `data/usuarios.csv` com o seguinte formato:
+```csv
+profile_id,email,password,name
+1,teste001@meudominio.com,SenhaSegura123!,Usuario Teste 1
+2,teste002@meudominio.com,SenhaSegura123!,Usuario Teste 2
+```
+* `profile_id`: Número do perfil do AdsPower (coluna `Nº`) ou ID alfanumérico.
+* `email`: Endereço de e-mail a registrar.
+* `password`: Senha para o cadastro.
+* `name`: Nome a ser preenchido.
+
+### 3.3. Contrato de Saída (Output Payload - JSON Consumível)
+Ao terminar a execução, o outro sistema deve ler o arquivo **`reports/resumo.json`**:
+```json
+{
+  "total_tests": 4,
+  "success_count": 4,
+  "failure_count": 0,
+  "timeout_count": 0,
+  "profile_error_count": 0,
+  "connection_error_count": 0,
+  "success_rate_percent": 100.0,
+  "avg_duration_ms": 3478.48,
+  "p95_duration_ms": 4096.18,
+  "per_profile_summary": {
+    "1": [
+      {
+        "email": "te***@meudominio.com",
+        "status": "SUCCESS",
+        "step": "COMPLETE",
+        "duration_ms": 3435.87,
+        "error_message": null
+      }
+    ]
+  }
+}
+```
+
+* **Dicionário de Status:**
+  * `SUCCESS`: Cadastro concluído e validado na interface.
+  * `FAILED`: Rejeitado pelo formulário da web (ex: e-mail duplicado).
+  * `TIMEOUT`: Algum elemento demorou mais que o timeout configurado.
+  * `PROFILE_ERROR`: Falha de inicialização do perfil no AdsPower.
+  * `CONNECTION_ERROR`: Impossibilidade de conectar à API Local do AdsPower.
 
 ---
 
@@ -79,8 +107,6 @@ O framework funciona como uma esteira contínua, onde o resultado de cada módul
   * Ou no canto superior direito da janela do AdsPower: clicar no avatar do usuário ➔ `Configurações` ➔ aba `Local API`.
 * **Identificador de Perfil:**
   * O número que aparece na coluna **`Nº`** (ex: `1`) pode ser colocado diretamente no arquivo `data/usuarios.csv`. O código detecta se é número e envia `serial_number=1` automaticamente.
-* **Criação de Contas no Próprio Domínio:**
-  * Basta configurar a variável `ONBOARDING_URL` no `.env` apontando para o link de cadastro do seu domínio.
 
 ---
 
