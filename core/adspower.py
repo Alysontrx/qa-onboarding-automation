@@ -49,6 +49,7 @@ class AdsPowerClient:
         if self._client is None or self._client.is_closed:
             headers = {
                 "Accept": "application/json",
+                "x-mcp-client": "mcp",
             }
             if self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"
