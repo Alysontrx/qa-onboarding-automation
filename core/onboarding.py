@@ -1,0 +1,279 @@
+"""Módulo de automação do formulário de onboarding.
+
+Implementa a função reutilizável execute_onboarding com esperas explícitas,
+seletores configuráveis por data-testid, captura de screenshots apenas em falhas,
+medição precisa de tempo e classificação estruturada de resultados.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+from enum import Enum
+import logging
+from pathlib import Path
+import time
+from typing import Optional
+from dataclasses import dataclass
+
+from playwright.async_api import Error as PlaywrightError, Page, TimeoutError as PlaywrightTimeoutError
+
+from config.settings import SelectorsConfig, Settings, get_settings
+from core.csv_loader import UserData
+
+logger = logging.getLogger("qa_framework.onboarding")
+
+
+class ExecutionStatus(str, Enum):
+    """Classificação dos resultados de execução conforme especificação de QA."""
+
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+    PROFILE_ERROR = "PROFILE_ERROR"
+    CONNECTION_ERROR = "CONNECTION_ERROR"
+
+
+@dataclass
+class ExecutionResult:
+    """Resultado detalhado da execução de onboarding para um perfil/usuário."""
+
+    profile_id: str
+    email: str
+    status: ExecutionStatus
+    step: str
+    duration_ms: float
+    error_message: Optional[str] = None
+    screenshot_path: Optional[str] = None
+    timestamp: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.timestamp:
+            self.timestamp = datetime.now().isoformat()
+
+    @property
+    def is_success(self) -> bool:
+        return self.status == ExecutionStatus.SUCCESS
+
+    def to_dict(self) -> dict:
+        return {
+            "timestamp": self.timestamp,
+            "profile_id": self.profile_id,
+            "email": self.email,
+            "status": self.status.value,
+            "step": self.step,
+            "duration_ms": round(self.duration_ms, 2),
+            "error_message": self.error_message or "",
+            "screenshot_path": self.screenshot_path or "",
+        }
+
+
+async def _capture_failure_screenshot(
+    page: Page,
+    profile_id: str,
+    log_dir: Path,
+    label: str,
+) -> Optional[str]:
+    """Captura screenshot da tela de erro de forma sanitizada."""
+    try:
+        screenshots_dir = log_dir / "screenshots"
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{profile_id}_{label}_{timestamp_str}.png"
+        filepath = screenshots_dir / filename
+        await page.screenshot(path=str(filepath), full_page=False)
+        return str(filepath)
+    except Exception as exc:
+        logger.debug("Não foi possível capturar screenshot de erro para '%s': %s", profile_id, exc)
+        return None
+
+
+async def execute_onboarding(
+    page: Page,
+    user_data: UserData,
+    settings: Optional[Settings] = None,
+    selectors: Optional[SelectorsConfig] = None,
+    custom_timeout: Optional[int] = None,
+) -> ExecutionResult:
+    """Executa o fluxo completo de registro de onboarding na página alvo.
+
+    Args:
+        page: Instância de Page do Playwright conectada à sessão.
+        user_data: Objeto com credenciais e dados do usuário a registrar.
+        settings: Instância de configurações gerais.
+        selectors: Seletores da UI (preferência por data-testid).
+        custom_timeout: Timeout em milissegundos para as operações.
+
+    Returns:
+        ExecutionResult com status classificado, métricas de tempo e detalhes.
+    """
+    cfg = settings or get_settings()
+    sel = selectors or cfg.selectors
+    timeout = custom_timeout or cfg.default_timeout
+    target_url = cfg.onboarding_url
+
+    start_time = time.perf_counter()
+    current_step = "INITIALIZE"
+
+    try:
+        # Etapa 1: Navegação para a URL alvo de homologação
+        current_step = "NAVIGATE"
+        logger.info(
+            "[%s] Navegando para '%s' (Timeout: %dms)",
+            user_data.profile_id,
+            target_url,
+            timeout,
+        )
+        await page.goto(target_url, wait_until="domcontentloaded", timeout=timeout)
+
+        # Etapa 2: Localização e validação dos campos do formulário
+        current_step = "IDENTIFY_FIELDS"
+        await page.wait_for_selector(sel.email, timeout=timeout, state="visible")
+        await page.wait_for_selector(sel.password, timeout=timeout, state="visible")
+        await page.wait_for_selector(sel.name, timeout=timeout, state="visible")
+        await page.wait_for_selector(sel.submit, timeout=timeout, state="visible")
+
+        # Etapa 3: Preenchimento dos dados do usuário
+        current_step = "FILL_EMAIL"
+        await page.fill(sel.email, user_data.email, timeout=timeout)
+
+        current_step = "FILL_PASSWORD"
+        # Preenche a senha diretamente sem expor seu valor nos logs
+        await page.fill(sel.password, user_data.password, timeout=timeout)
+
+        current_step = "FILL_NAME"
+        await page.fill(sel.name, user_data.name, timeout=timeout)
+
+        # Etapa 4: Submissão do formulário
+        current_step = "SUBMIT"
+        logger.info(
+            "[%s] Submetendo formulário para e-mail '%s'",
+            user_data.profile_id,
+            user_data.masked_email,
+        )
+        await page.click(sel.submit, timeout=timeout)
+
+        # Etapa 5: Aguardar confirmação de sucesso ou mensagem de erro
+        current_step = "AWAIT_CONFIRMATION"
+
+        success_task = asyncio.create_task(
+            page.wait_for_selector(sel.success_message, timeout=timeout, state="visible")
+        )
+        error_task = asyncio.create_task(
+            page.wait_for_selector(sel.error_message, timeout=timeout, state="visible")
+        )
+
+        done, pending = await asyncio.wait(
+            [success_task, error_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        # Cancela tarefas que ainda estiverem pendentes
+        for task in pending:
+            task.cancel()
+
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+
+        if success_task in done and not success_task.cancelled() and not success_task.exception():
+            logger.info(
+                "[%s] Onboarding concluído com SUCESSO em %.2fms",
+                user_data.profile_id,
+                duration_ms,
+            )
+            return ExecutionResult(
+                profile_id=user_data.profile_id,
+                email=user_data.masked_email,
+                status=ExecutionStatus.SUCCESS,
+                step="COMPLETE",
+                duration_ms=duration_ms,
+            )
+
+        if error_task in done and not error_task.cancelled() and not error_task.exception():
+            # Captura a mensagem de erro renderizada na interface
+            error_elem = await page.query_selector(sel.error_message)
+            error_text = (await error_elem.inner_text()).strip() if error_elem else "Erro desconhecido na interface"
+            logger.warning(
+                "[%s] Formulário rejeitado pela aplicação: '%s'",
+                user_data.profile_id,
+                error_text,
+            )
+            screenshot = await _capture_failure_screenshot(
+                page, user_data.profile_id, cfg.log_dir, "form_rejected"
+            )
+            return ExecutionResult(
+                profile_id=user_data.profile_id,
+                email=user_data.masked_email,
+                status=ExecutionStatus.FAILED,
+                step="FORM_VALIDATION_ERROR",
+                duration_ms=duration_ms,
+                error_message=f"Aplicação retornou erro: {error_text}",
+                screenshot_path=screenshot,
+            )
+
+        # Se nenhum seletor foi localizado dentro do timeout
+        raise PlaywrightTimeoutError("Nenhuma confirmação de sucesso ou erro foi encontrada após submissão.")
+
+    except PlaywrightTimeoutError as exc:
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+        logger.error(
+            "[%s] Timeout durante a etapa '%s' (%.2fms): %s",
+            user_data.profile_id,
+            current_step,
+            duration_ms,
+            exc,
+        )
+        screenshot = await _capture_failure_screenshot(
+            page, user_data.profile_id, cfg.log_dir, f"timeout_{current_step.lower()}"
+        )
+        return ExecutionResult(
+            profile_id=user_data.profile_id,
+            email=user_data.masked_email,
+            status=ExecutionStatus.TIMEOUT,
+            step=current_step,
+            duration_ms=duration_ms,
+            error_message=f"Timeout na etapa {current_step}: {exc}",
+            screenshot_path=screenshot,
+        )
+
+    except PlaywrightError as exc:
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+        logger.error(
+            "[%s] Erro Playwright na etapa '%s': %s",
+            user_data.profile_id,
+            current_step,
+            exc,
+        )
+        screenshot = await _capture_failure_screenshot(
+            page, user_data.profile_id, cfg.log_dir, f"error_{current_step.lower()}"
+        )
+        return ExecutionResult(
+            profile_id=user_data.profile_id,
+            email=user_data.masked_email,
+            status=ExecutionStatus.FAILED,
+            step=current_step,
+            duration_ms=duration_ms,
+            error_message=f"Erro de automação: {exc}",
+            screenshot_path=screenshot,
+        )
+
+    except Exception as exc:
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+        logger.exception(
+            "[%s] Falha inesperada durante o onboarding na etapa '%s': %s",
+            user_data.profile_id,
+            current_step,
+            exc,
+        )
+        screenshot = await _capture_failure_screenshot(
+            page, user_data.profile_id, cfg.log_dir, "unexpected_error"
+        )
+        return ExecutionResult(
+            profile_id=user_data.profile_id,
+            email=user_data.masked_email,
+            status=ExecutionStatus.FAILED,
+            step=current_step,
+            duration_ms=duration_ms,
+            error_message=f"Erro inesperado: {exc}",
+            screenshot_path=screenshot,
+        )
+

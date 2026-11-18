@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Ambientes virtuais
+.venv/
+venv/
+ENV/
+env/
+
+# Configurações com credenciais
+.env
+
+# Logs e Screenshots
+logs/*.log
+logs/screenshots/
+logs/*.txt
+
+# Relatórios gerados
+reports/*.csv
+reports/*.json
+
+# Testes e Cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Playwright
+test-results/
+playwright-report/
+

@@ -1,0 +1,6 @@
+profile_id,email,password,name
+perfil_001,qa001@exemplo.com,SenhaTeste123,Ana QA
+perfil_002,qa002@exemplo.com,SenhaTeste123,Carlos QA
+perfil_003,qa003@exemplo.com,SenhaTeste123,Mariana QA
+perfil_004,qa004@exemplo.com,SenhaTeste123,Rodrigo QA
+
