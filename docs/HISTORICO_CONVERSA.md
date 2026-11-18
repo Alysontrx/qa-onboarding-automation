@@ -41,3 +41,4 @@ python main.py --use-adspower --concurrency 2
 # Testar se CSV e configurações estão válidas sem abrir navegadores
 python main.py --dry-run
 ```
+

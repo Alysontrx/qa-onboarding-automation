@@ -84,3 +84,4 @@ python main.py --use-adspower --concurrency 2
   * Tempo médio de execução: ~3.4 segundos por cadastro.
   * Percentil 95 (p95): ~4.0 segundos.
   * Relatórios e screenshots validados em disco.
+
