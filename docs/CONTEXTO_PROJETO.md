@@ -1,59 +1,77 @@
 # Contexto Geral do Projeto e Histórico de Desenvolvimento
 
-Este documento foi gerado para fornecer **100% de contexto** do projeto para desenvolvedores, analistas de QA e assistentes de IA em qualquer outro computador.
+Este documento unifica **100% do contexto técnico, arquitetura e histórico de decisões** do projeto **QA Onboarding Automation**, servindo de guia completo para desenvolvedores, analistas de QA e assistentes de IA em qualquer computador.
 
 ---
 
 ## 1. Visão Geral e Propósito
 
-* **Objetivo Principal:** Desenvolver um framework de QA em Python de nível sênior para testar a escalabilidade, resiliência e performance do fluxo de onboarding e registro de usuários em aplicações web.
-* **Escopo:** Automação de navegadores reais via **Playwright** integrado à **AdsPower Local API** (usando Chrome DevTools Protocol - CDP), com suporte a fallback para **Chromium Local isolado**.
-* **Caso de Uso:** Realizar testes de carga e onboarding automatizado em massa, garantindo relatórios estatísticos completos (taxa de sucesso, tempo médio, percentil 95 - p95) e segurança absoluta de senhas/credenciais.
+* **Objetivo:** Framework profissional em Python 3.11+ para testes de QA, carga e confiabilidade no fluxo de onboarding/registro de aplicações web.
+* **Modo Híbrido:**
+  * **AdsPower Local API:** Conexão direta via Chrome DevTools Protocol (CDP) aos perfis do AdsPower.
+  * **Playwright Local:** Execução isolada em Chromium nativo, permitindo testes sem depender do AdsPower aberto.
+* **Segurança:** As senhas nunca são exibidas em logs, terminal ou relatórios (mascaramento estrito com `UserData.masked_password`).
+* **Confiabilidade:** Zero processos órfãos — todas as abas e instâncias do AdsPower são encerradas ao final de cada teste ou sob interrupção (SIGINT/SIGTERM).
 
 ---
 
-## 2. Decisões de Arquitetura e Tecnologias
+## 2. Linha do Tempo e Decisões de Engenharia
 
-### Stack Técnica:
-* **Python 3.11+** (testado e validado em Python 3.13)
-* **Playwright (Async API):** Controle de instâncias de navegadores via CDP ou processo local.
-* **HTTPX (AsyncClient):** Comunicação REST de alta performance com a Local API do AdsPower.
-* **Rich:** Interface de linha de comando com tabelas, painéis e barra de progresso em tempo real.
-* **Pytest & Pytest-Asyncio:** Suite com 17 testes automatizados cobrindo todos os módulos.
-* **Python-Dotenv:** Parametrização desacoplada através do arquivo `.env`.
+### 2.1. Arquitetura Modular
+O framework foi organizado em camadas desacopladas:
+* `config/settings.py`: Centralização de parâmetros, `.env` e seletores da UI (preferência por `data-testid`).
+* `core/adspower.py`: Cliente HTTP assíncrono para os endpoints oficiais do AdsPower (`/status`, `/api/v1/browser/active`, `/api/v1/browser/start`, `/api/v1/browser/stop`).
+* `core/browser_manager.py`: Gerenciamento do ciclo de vida das sessões Playwright (CDP ou Local).
+* `core/csv_loader.py`: Ingestão de `data/usuarios.csv`, validação rigorosa de campos obrigatórios, formato de e-mail e duplicidades.
+* `core/onboarding.py`: Execução da automação com esperas explícitas, medição de tempo e screenshots apenas em falhas (`logs/screenshots/`).
+* `core/executor.py`: Orquestrador concorrente (`asyncio.Semaphore`), fila de tarefas, pacing (`RATE_LIMIT_DELAY`) e retentativas automáticas (`MAX_RETRIES`).
+* `core/reporter.py`: Logs rotativos de 5MB (`logs/qa_execution.log`), relatórios detalhados em CSV (`reports/resultados.csv`) e consolidado estatístico em JSON (`reports/resumo.json`).
+* `main.py`: CLI interativo com interface Rich e barra de progresso em tempo real.
+* `tests/`: 17 testes automatizados com `pytest` e servidor mock (`tests/mock_server.py`).
 
-### Estrutura Modular:
-* `config/settings.py`: Centraliza todas as configurações, caminhos e seletores da interface (`data-testid`).
-* `core/adspower.py`: Gerencia o ciclo de vida dos navegadores no AdsPower (verificação de status, abertura de abas, captura do WebSocket `ws.puppeteer`, encerramento e prevenção de processos órfãos). Aceita tanto `user_id` alfanumérico quanto o número de série da coluna `Nº` (ex: `1`).
-* `core/browser_manager.py`: Abstração para conexão CDP (AdsPower) ou inicialização de Chromium nativo do Playwright.
-* `core/csv_loader.py`: Ingestão de `data/usuarios.csv`, validação rigorosa de campos obrigatórios, formato de e-mail, prevenção de duplicidades e mascaramento automático de senhas (`UserData.masked_password`).
-* `core/onboarding.py`: Execução do fluxo de cadastro com esperas explícitas, medição de tempo em milissegundos e captura de screenshots apenas em falhas/timeouts (`logs/screenshots/`).
-* `core/executor.py`: Orquestrador concorrente (`asyncio.Semaphore`), fila de tarefas, pacing de carga (`RATE_LIMIT_DELAY`), retentativas automáticas (`MAX_RETRIES`) e captura graciosa de interrupção (SIGINT/SIGTERM).
-* `core/reporter.py`: Logs rotativos de 5MB (`logs/qa_execution.log`), exportação individual em CSV (`reports/resultados.csv`) e consolidado estatístico em JSON (`reports/resumo.json`).
-* `main.py`: Ponto de entrada CLI interativo.
-* `tests/`: 17 testes unitários e de integração E2E com servidor mock local (`tests/mock_server.py`).
-
----
-
-## 3. Resumo dos Requisitos Atendidos
-
-1. **AdsPower Local API:** Totalmente integrada via HTTP REST, usando porta padrão `50325`, suporte a API Key opcional, reutilização de sessões ativas e desligamento de processos para não consumir RAM residual.
-2. **Segurança de Credenciais:** As senhas nunca aparecem nos logs ou na tela do terminal.
-3. **Massa de Dados Dinâmica:** Novos cadastros podem ser adicionados ao arquivo `data/usuarios.csv` sem alterar código.
-4. **Relatórios e Estatísticas:** Cálculo em tempo de execução do **Percentil 95 (p95)**, tempo médio e taxa de sucesso percentual.
-5. **Modo Híbrido:** Permite executar com AdsPower (`--use-adspower`) ou de modo 100% autônomo com Playwright local (`--local`).
+### 2.2. Depuração e Problemas Resolvidos
+1. **`TypeError: unhashable type: 'BrowserSession'`:**
+   * Ajustada a dataclass com `@dataclass(eq=False)` em `core/browser_manager.py`, permitindo rastrear as instâncias abertas em conjuntos (`set`) para encerramento seguro.
+2. **Compatibilidade com Perfis AdsPower (`serial_number` vs `user_id`):**
+   * O cliente `core/adspower.py` detecta automaticamente se o identificador informado no CSV é numérico (passando `serial_number=X`) ou alfanumérico (passando `user_id=X`), permitindo usar diretamente o número exibido na coluna **`Nº`** do AdsPower (ex: perfil `1`).
 
 ---
 
-## 4. Como Rodar em Outro Computador (Passo a Passo Rápido)
+## 3. Dúvidas Operacionais Resolvidas
+
+* **Onde ativar a Local API no AdsPower (macOS):**
+  * No menu superior do Mac: `Adspower global` ➔ `Preferências...` (ou atalho `Cmd + ,`), aba **Local API** ➔ ativar chave seletora ➔ confirmar porta `50325`.
+  * Ou no canto superior direito da janela do AdsPower: clicar no avatar do usuário ➔ `Configurações` ➔ aba `Local API`.
+* **Identificador de Perfil:**
+  * O número que aparece na coluna **`Nº`** (ex: `1`) pode ser colocado diretamente no arquivo `data/usuarios.csv`.
+* **Criação de Contas no Próprio Domínio:**
+  * O framework está pronto para preencher formulários web no domínio desejado, bastando configurar a variável `ONBOARDING_URL` no `.env`.
+
+---
+
+## 4. Métricas e Testes Já Validados
+
+1. **Suite Pytest:**
+   * 17 testes executados com 100% de sucesso (`tests/test_csv_loader.py`, `tests/test_adspower.py` e `tests/test_onboarding.py`).
+2. **Execução E2E ao Vivo:**
+   * Executado contra servidor local de teste com concorrência de 2 workers:
+     * Taxa de sucesso: 100.0%
+     * Tempo médio por cadastro: ~3.4 segundos.
+     * Percentil 95 (p95): ~4.0 segundos.
+     * Relatórios CSV e JSON gerados com sucesso.
+
+---
+
+## 5. Como Rodar em Outro Computador (Passo a Passo)
 
 ```bash
-# 1. Acessar a pasta
-cd teste-contas
+# 1. Clonar o repositório
+git clone https://github.com/Alysontrx/qa-onboarding-automation.git
+cd qa-onboarding-automation
 
-# 2. Criar ambiente virtual
+# 2. Criar e ativar o ambiente virtual
 python3 -m venv .venv
-source .venv/bin/activate  # (ou .venv\Scripts\Activate.ps1 no Windows)
+source .venv/bin/activate  # (.venv\Scripts\Activate.ps1 no Windows)
 
 # 3. Instalar dependências
 pip install -r requirements.txt
@@ -62,26 +80,13 @@ playwright install chromium
 # 4. Validar os testes automatizados
 pytest -v
 
-# 5. Criar arquivo de configuração .env
+# 5. Criar arquivo .env e configurar suas variáveis
 cp .env.example .env
 
-# 6. Executar o framework
-# Modo Local:
-python main.py --local --url http://127.0.0.1:8080/register
+# 6. Executar o framework:
+# Modo Local (Playwright Standalone, sem AdsPower):
+python main.py --local --no-headless --url http://127.0.0.1:8080/register
 
-# Modo AdsPower:
+# Modo AdsPower (conectando na Local API):
 python main.py --use-adspower --concurrency 2
 ```
-
----
-
-## 5. Histórico de Testes Validados
-
-* **Pytest:** 17 testes executados com 100% de aprovação (testes de parsing de CSV, mocked AdsPower REST API e E2E Playwright).
-* **Teste com Servidor de Homologação Local:**
-  * 4 cadastros executados com concorrência de 2 workers.
-  * 100% de sucesso.
-  * Tempo médio de execução: ~3.4 segundos por cadastro.
-  * Percentil 95 (p95): ~4.0 segundos.
-  * Relatórios e screenshots validados em disco.
-
