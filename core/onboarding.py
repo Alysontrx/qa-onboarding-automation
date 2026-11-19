@@ -143,8 +143,18 @@ async def execute_onboarding(
                     if btn and await btn.is_visible():
                         await btn.click()
                         logger.debug("[%s] Banner de cookies aceito/fechado.", user_data.profile_id)
-                        await asyncio.sleep(0.5)
-                        break
+                        await asyncio.sleep(0.3)
+                        return
+            except Exception:
+                pass
+
+            # Fallback nativo via JavaScript para fechar qualquer banner de cookies imediatamente
+            try:
+                await page.evaluate("""() => {
+                    const btns = Array.from(document.querySelectorAll('button'));
+                    const cookieBtn = btns.find(b => b.textContent && (b.textContent.includes('Aceitar todos') || b.textContent.includes('Accept all') || b.textContent.includes('Aceitar')));
+                    if (cookieBtn) cookieBtn.click();
+                }""")
             except Exception:
                 pass
 
@@ -160,102 +170,118 @@ async def execute_onboarding(
         await page.fill(sel.email, user_data.email, timeout=timeout)
         await asyncio.sleep(0.5)
 
+        def is_oauth(text: str) -> bool:
+            low = text.lower()
+            return any(k in low for k in ["google", "github", "apple", "microsoft", "sso"])
+
         # Se o campo de senha ainda não estiver visível (fluxo de 2 etapas como Lovable), avança a primeira etapa
         try:
             pwd_elem = await page.query_selector(sel.password)
             if not pwd_elem or not await pwd_elem.is_visible():
-                step1_selectors = [
-                    "button:has-text('Continuar')",
-                    "button:has-text('Continue')",
-                    "button:has-text('Avançar')",
-                    "[data-testid='auth-submit-button']",
-                    "button[type='submit']",
-                ]
-                clicked = False
-                for s1 in step1_selectors:
-                    step1_btn = await page.query_selector(s1)
-                    if step1_btn and await step1_btn.is_visible():
-                        logger.info("[%s] Formulário em 2 etapas detectado; clicando em '%s'...", user_data.profile_id, s1)
-                        await step1_btn.click(timeout=timeout)
-                        clicked = True
-                        break
-                if not clicked:
+                step1_btn = None
+                buttons = await page.query_selector_all("button[type='submit'], form button, button")
+                for b in buttons:
+                    try:
+                        if not await b.is_visible():
+                            continue
+                        b_text = (await b.inner_text()).strip()
+                        if is_oauth(b_text):
+                            continue
+                        if any(w in b_text.lower() for w in ["continuar", "continue", "avançar", "sign up", "cadastrar"]):
+                            step1_btn = b
+                            break
+                    except Exception:
+                        continue
+
+                if step1_btn:
+                    b_name = (await step1_btn.inner_text()).strip()
+                    logger.info("[%s] Formulário em 2 etapas detectado; clicando em '%s'...", user_data.profile_id, b_name)
+                    await step1_btn.click(timeout=timeout)
+                else:
                     logger.info("[%s] Pressionando Enter no campo de e-mail para avançar...", user_data.profile_id)
                     await page.press(sel.email, "Enter")
-                await asyncio.sleep(1.5)
+
+                await asyncio.sleep(2.0)
         except Exception as exc:
-            logger.debug("[%s] Falha ao avançar etapa 1: %s", user_data.profile_id, exc)
+            logger.debug("[%s] Falha ao avançar etapa de e-mail: %s", user_data.profile_id, exc)
 
-        current_step = "FILL_PASSWORD"
+        current_step = "CHECK_PASSWORD_OR_MAGIC_LINK"
         await try_dismiss_cookies()
-        await page.wait_for_selector(sel.password, timeout=timeout, state="visible")
-        # Preenche a senha diretamente sem expor seu valor nos logs
-        await page.fill(sel.password, user_data.password, timeout=timeout)
 
-        # Preenchimento de Nome (se existir na página)
-        try:
-            name_elem = await page.query_selector(sel.name)
-            if name_elem and await name_elem.is_visible():
-                current_step = "FILL_NAME"
-                await name_elem.fill(user_data.name, timeout=timeout)
-        except Exception:
-            pass
+        # Aguarda: ou aparece o campo de senha, ou a aplicação já manda o link direto (Magic Link)
+        pwd_task = asyncio.create_task(page.wait_for_selector(sel.password, timeout=12000, state="visible"))
+        success_early_task = asyncio.create_task(page.wait_for_selector(sel.success_message, timeout=12000, state="visible"))
+        error_early_task = asyncio.create_task(page.wait_for_selector(sel.error_message, timeout=12000, state="visible"))
 
-        # Campos opcionais comuns em páginas de cadastro:
-        # 1. Campo de Confirmação de Senha (se existir na página)
-        try:
-            confirm_pwd_elem = await page.query_selector(
-                "input[name*='confirm'], input[id*='confirm'], input[data-testid*='confirm'], input[name*='repassword']"
-            )
-            if confirm_pwd_elem and await confirm_pwd_elem.is_visible():
-                await confirm_pwd_elem.fill(user_data.password)
-                logger.debug("[%s] Campo de confirmação de senha preenchido.", user_data.profile_id)
-        except Exception:
-            pass
-
-        # 2. Checkbox de Termos de Uso / Política (se existir na página)
-        try:
-            terms_checkbox = await page.query_selector(
-                "input[type='checkbox'][name*='term'], input[type='checkbox'][name*='agree'], input[type='checkbox'][name*='politica'], input[type='checkbox'][required]"
-            )
-            if terms_checkbox and await terms_checkbox.is_visible():
-                if not await terms_checkbox.is_checked():
-                    await terms_checkbox.check()
-                    logger.debug("[%s] Checkbox de termos de uso marcado.", user_data.profile_id)
-        except Exception:
-            pass
-
-        # Etapa 4: Submissão do formulário
-        current_step = "SUBMIT"
-        logger.info(
-            "[%s] Submetendo formulário para e-mail '%s'",
-            user_data.profile_id,
-            user_data.masked_email,
+        done_early, pending_early = await asyncio.wait(
+            [pwd_task, success_early_task, error_early_task],
+            return_when=asyncio.FIRST_COMPLETED,
         )
-        submit_btn = None
-        for s_btn in [
-            "button:has-text('Continuar')",
-            "button:has-text('Create your account')",
-            "button:has-text('Criar conta')",
-            "button:has-text('Crie sua conta')",
-            "button:has-text('Cadastrar')",
-            "button:has-text('Sign up')",
-            "[data-testid='auth-submit-button']",
-            "[data-testid='btn-submit']",
-            "button[type='submit']",
-        ]:
-            elem = await page.query_selector(s_btn)
-            if elem and await elem.is_visible():
-                submit_btn = elem
-                break
+        for t in pending_early:
+            t.cancel()
 
-        if submit_btn:
-            await submit_btn.click(timeout=timeout)
-        else:
+        if pwd_task in done_early and not pwd_task.cancelled() and not pwd_task.exception():
+            # A página exigiu senha! Preenche e submete:
+            current_step = "FILL_PASSWORD"
+            await page.fill(sel.password, user_data.password, timeout=timeout)
+            await asyncio.sleep(0.5)
+
+            # Preenchimento de Nome (se existir na página)
             try:
-                await page.click(sel.submit, timeout=timeout)
+                name_elem = await page.query_selector(sel.name)
+                if name_elem and await name_elem.is_visible():
+                    current_step = "FILL_NAME"
+                    await name_elem.fill(user_data.name, timeout=timeout)
             except Exception:
-                await page.press(sel.password, "Enter")
+                pass
+
+            # Confirmação de senha (se existir)
+            try:
+                confirm_pwd_elem = await page.query_selector(
+                    "input[name*='confirm'], input[id*='confirm'], input[data-testid*='confirm'], input[name*='repassword']"
+                )
+                if confirm_pwd_elem and await confirm_pwd_elem.is_visible():
+                    await confirm_pwd_elem.fill(user_data.password)
+            except Exception:
+                pass
+
+            # Checkbox de termos (se existir)
+            try:
+                terms_checkbox = await page.query_selector(
+                    "input[type='checkbox'][name*='term'], input[type='checkbox'][name*='agree'], input[type='checkbox'][name*='politica'], input[type='checkbox'][required]"
+                )
+                if terms_checkbox and await terms_checkbox.is_visible() and not await terms_checkbox.is_checked():
+                    await terms_checkbox.check()
+            except Exception:
+                pass
+
+            # Submissão final do formulário
+            current_step = "SUBMIT"
+            submit_btn = None
+            buttons = await page.query_selector_all("button[type='submit'], form button, button")
+            for b in buttons:
+                try:
+                    if not await b.is_visible():
+                        continue
+                    b_text = (await b.inner_text()).strip()
+                    if is_oauth(b_text):
+                        continue
+                    if any(w in b_text.lower() for w in ["continuar", "create your account", "criar conta", "crie sua conta", "cadastrar", "sign up"]):
+                        submit_btn = b
+                        break
+                except Exception:
+                    continue
+
+            if submit_btn:
+                await submit_btn.click(timeout=timeout)
+            else:
+                try:
+                    await page.click(sel.submit, timeout=timeout)
+                except Exception:
+                    await page.press(sel.password, "Enter")
+
+        elif success_early_task in done_early and not success_early_task.cancelled() and not success_early_task.exception():
+            logger.info("[%s] Lovable avançou diretamente para envio de link mágico sem exigir senha!", user_data.profile_id)
 
         # Etapa 5: Aguardar confirmação de sucesso ou mensagem de erro
         current_step = "AWAIT_CONFIRMATION"
