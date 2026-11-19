@@ -13,6 +13,7 @@ from enum import Enum
 import logging
 from pathlib import Path
 import time
+import re
 from typing import Optional
 from dataclasses import dataclass
 
@@ -21,6 +22,7 @@ from playwright.async_api import Error as PlaywrightError, Page, TimeoutError as
 from config.settings import SelectorsConfig, Settings, get_settings
 from core.csv_loader import UserData
 from core.email_verifier import EmailVerifier
+from core.gateway_sync import SixtySixGatewaySync
 
 logger = logging.getLogger("qa_framework.onboarding")
 
@@ -237,7 +239,7 @@ async def execute_onboarding(
 
         if success_task in done and not success_task.cancelled() and not success_task.exception():
             # Se a verificação por e-mail estiver habilitada, aguarda o link de ativação
-            if cfg.verify_email:
+            if cfg.verify_email and not ("127.0.0.1" in target_url or "localhost" in target_url):
                 current_step = "WAIT_ACTIVATION_EMAIL"
                 logger.info(
                     "[%s] Formulário submetido. Aguardando e-mail de ativação para '%s'...",
@@ -297,6 +299,119 @@ async def execute_onboarding(
                     await page.wait_for_selector(sel.activation_success, timeout=timeout)
                 except Exception:
                     logger.debug("[%s] Seletor de sucesso de ativação não detectado; página carregada com sucesso.", user_data.profile_id)
+
+            # Etapa 6: Automação do Remix da Matriz Lovable (Árvore Auto-Alimentada)
+            if cfg.auto_remix and "lovable.dev" in cfg.onboarding_url:
+                current_step = "REMIX_MATRIX"
+                try:
+                    logger.info(
+                        "[%s] [ÁRVORE REMIX] Iniciando processo de Remix automático da matriz...",
+                        user_data.profile_id,
+                    )
+                    gateway_sync = SixtySixGatewaySync(gateway_url=cfg.six_gateway_url)
+                    matrix_info = await gateway_sync.get_next_matrix()
+                    matrix_id = (matrix_info.get("matrix_id") if matrix_info and matrix_info.get("ok") else None) or cfg.default_matrix_id
+
+                    remix_url = f"https://lovable.dev/projects/{matrix_id}/remix"
+                    logger.info(
+                        "[%s] [ÁRVORE REMIX] Navegando para Matriz Lovable: %s",
+                        user_data.profile_id,
+                        remix_url,
+                    )
+                    await page.goto(remix_url, wait_until="domcontentloaded", timeout=timeout)
+                    await asyncio.sleep(2.0)
+
+                    # Tenta clicar no botão de Remix na página
+                    remix_button_selector = (
+                        "button:has-text('Remix project'), button:has-text('Remix'), "
+                        "button:has-text('Use template'), button:has-text('Fork'), "
+                        "[data-testid*='remix'], button[type='submit']"
+                    )
+                    try:
+                        remix_btn = await page.wait_for_selector(remix_button_selector, timeout=12000, state="visible")
+                        if remix_btn:
+                            await remix_btn.click()
+                            logger.info("[%s] [ÁRVORE REMIX] Botão de Remix clicado com sucesso!", user_data.profile_id)
+                    except Exception as exc:
+                        logger.warning("[%s] [ÁRVORE REMIX] Botão de remix não encontrado diretamente: %s", user_data.profile_id, exc)
+
+                    # Aguarda redirecionamento para o novo projeto (/projects/<novo_id>)
+                    logger.info("[%s] [ÁRVORE REMIX] Aguardando criação do projeto clonado...", user_data.profile_id)
+                    new_project_id = None
+                    for _ in range(25):
+                        cur_url = page.url
+                        match = re.search(r"/projects/([a-zA-Z0-9_-]+)", cur_url)
+                        if match and match.group(1) != matrix_id and "remix" not in cur_url:
+                            new_project_id = match.group(1)
+                            break
+                        await asyncio.sleep(1.0)
+
+                    if new_project_id:
+                        logger.info(
+                            "[%s] [ÁRVORE SUCESSO] Projeto clonado com sucesso! Novo ID: %s",
+                            user_data.profile_id,
+                            new_project_id,
+                        )
+                        # Auto-alimenta o pool de matrizes com o novo projeto criado
+                        added_matrix = await gateway_sync.register_new_matrix(new_project_id)
+                        if added_matrix:
+                            logger.info(
+                                "[%s] [ÁRVORE MATRIX] Novo projeto adicionado ao pool de matrizes: %s",
+                                user_data.profile_id,
+                                new_project_id,
+                            )
+
+                        # Busca pela URL pública do projeto (.lovable.app) na interface
+                        app_url = None
+                        try:
+                            await asyncio.sleep(4.0)
+                            links = await page.query_selector_all("a[href*='.lovable.app']")
+                            for link_elem in links:
+                                href = await link_elem.get_attribute("href")
+                                if href and ".lovable.app" in href:
+                                    app_url = href.strip()
+                                    break
+
+                            if not app_url:
+                                iframes = await page.query_selector_all("iframe[src*='.lovable.app']")
+                                for iframe in iframes:
+                                    src = await iframe.get_attribute("src")
+                                    if src and ".lovable.app" in src:
+                                        app_url = src.strip()
+                                        break
+                        except Exception:
+                            pass
+
+                        if app_url:
+                            logger.info(
+                                "[%s] [ÁRVORE GATEWAY] URL do App detectada: %s. Registrando ponte...",
+                                user_data.profile_id,
+                                app_url,
+                            )
+                            reg_worker = await gateway_sync.register_worker(
+                                project_origin=app_url,
+                                workspace_label=f"Perfil {user_data.profile_id} - {user_data.name}",
+                            )
+                            if reg_worker.get("registered"):
+                                logger.info(
+                                    "[%s] [ÁRVORE GATEWAY] Ponte ativada e servindo Claude Opus no SixtySix! Worker ID: %s",
+                                    user_data.profile_id,
+                                    reg_worker.get("worker_id"),
+                                )
+                        else:
+                            logger.info(
+                                "[%s] [ÁRVORE SUCESSO] Projeto %s criado. A handshake interna registrará a ponte assim que o Vite compilar.",
+                                user_data.profile_id,
+                                new_project_id,
+                            )
+                    else:
+                        logger.warning(
+                            "[%s] [ÁRVORE AVISO] Timeout aguardando URL do novo projeto após remix. Matriz tentada: %s",
+                            user_data.profile_id,
+                            matrix_id,
+                        )
+                except Exception as exc:
+                    logger.warning("[%s] [ÁRVORE ERRO] Falha durante etapa de remix: %s", user_data.profile_id, exc)
 
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             logger.info(

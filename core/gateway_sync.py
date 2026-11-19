@@ -75,3 +75,28 @@ class SixtySixGatewaySync:
             except Exception as exc:
                 logger.error("Falha ao registrar trabalhador no SixtySix Gateway: %s", exc)
                 return {"registered": False, "error": str(exc)}
+
+    async def register_new_matrix(self, project_id: str) -> bool:
+        """Adiciona o novo projeto ao pool de matrizes para auto-alimentar a árvore."""
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                resp = await client.post(
+                    f"{self.gateway_url}/api/public/v1/matrix/register",
+                    json={"project_id": project_id.strip()},
+                )
+                return resp.status_code == 200 and resp.json().get("ok", False)
+            except Exception as exc:
+                logger.error("Falha ao registrar nova matriz no Gateway: %s", exc)
+                return False
+
+    async def report_dead_matrix(self, project_id: str, reason: str = "failed") -> bool:
+        """Notifica o Gateway de que uma matriz falhou ou foi bloqueada."""
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                resp = await client.post(
+                    f"{self.gateway_url}/api/public/v1/matrix/report-dead",
+                    json={"project_id": project_id.strip(), "reason": reason},
+                )
+                return resp.status_code == 200
+            except Exception:
+                return False

@@ -122,6 +122,17 @@ class Settings:
         default_factory=lambda: float(os.getenv("EMAIL_POLL_INTERVAL", "3.0"))
     )
 
+    # Integração com SixtySix Gateway e Remix Automático (Árvore Auto-Alimentada)
+    auto_remix: bool = field(
+        default_factory=lambda: os.getenv("AUTO_REMIX", "true").lower() in ("true", "1", "yes")
+    )
+    six_gateway_url: str = field(
+        default_factory=lambda: os.getenv("SIX_GATEWAY_URL", "http://127.0.0.1:17866").rstrip("/")
+    )
+    default_matrix_id: str = field(
+        default_factory=lambda: os.getenv("DEFAULT_MATRIX_ID", "b9408f43-30ad-4673-a65c-a5e2f1be699b").strip()
+    )
+
     # Seletores da UI
     selectors: SelectorsConfig = field(default_factory=SelectorsConfig)
 
