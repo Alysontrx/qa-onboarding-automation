@@ -53,7 +53,7 @@ Este documento unifica **100% do contexto técnico, arquitetura, histórico, Pla
 
 ## 4. Criação e Ativação de Contas com Domínio Próprio (`@sixtysix.online`)
 
-### 3.1. Arquitetura de Recebimento de E-mails (Catch-All Gratuito)
+### 4.1. Arquitetura de Recebimento de E-mails (Catch-All Gratuito)
 Como o domínio `sixtysix.online` está sob a Cloudflare (`gannon.ns.cloudflare.com` / `mona.ns.cloudflare.com`):
 
 1. **Ativar Cloudflare Email Routing:**
@@ -167,8 +167,8 @@ ADSPOWER_URL=http://127.0.0.1:50325
 ADSPOWER_API_KEY=
 USE_ADSPOWER=true
 
-# Aplicação Alvo
-ONBOARDING_URL=https://sixtysix.online/register
+# Aplicação Alvo (Lovable)
+ONBOARDING_URL=https://lovable.dev/signup
 
 # Concorrência e Timeouts
 MAX_CONCURRENCY=2
