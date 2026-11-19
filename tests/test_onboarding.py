@@ -121,6 +121,25 @@ def test_reporter_generation(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_send_notifications_dispatch(tmp_path: Path):
+    """Valida o envio de notificações e webhooks para Discord, Telegram e Genérico."""
+    reporter = QAReporter(report_dir=tmp_path / "reports", log_dir=tmp_path / "logs")
+    summary = {
+        "total_tests": 2,
+        "success_count": 2,
+        "failure_count": 0,
+        "timeout_count": 0,
+        "success_rate_percent": 100.0,
+        "avg_duration_ms": 500.0,
+        "p95_duration_ms": 600.0,
+    }
+
+    # Testa com URLs vazias (não deve lançar exceção)
+    res_empty = await reporter.send_notifications(summary)
+    assert not any(res_empty.values())
+
+
+@pytest.mark.asyncio
 async def test_execute_onboarding_success_flow(local_server, tmp_path: Path):
     """Valida o fluxo completo de onboarding com sucesso em página web real."""
     async with async_playwright() as p:

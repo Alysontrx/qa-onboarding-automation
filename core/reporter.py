@@ -10,10 +10,12 @@ from __future__ import annotations
 import csv
 import json
 import logging
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import httpx
 
 from core.onboarding import ExecutionResult, ExecutionStatus
 
@@ -171,4 +173,84 @@ class QAReporter:
             json.dump(summary_data, f, indent=2, ensure_ascii=False)
 
         return summary_data
+
+    async def send_notifications(
+        self,
+        summary_data: Dict[str, Any],
+        discord_webhook_url: str = "",
+        telegram_bot_token: str = "",
+        telegram_chat_id: str = "",
+        generic_webhook_url: str = "",
+    ) -> Dict[str, bool]:
+        """Dispara notificações para Discord, Telegram e Webhook HTTP após os testes."""
+        results = {"discord": False, "telegram": False, "webhook": False}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # 1. Notificação no Discord
+            if discord_webhook_url:
+                is_perfect = summary_data.get("failure_count", 0) == 0 and summary_data.get("timeout_count", 0) == 0
+                color = 3066993 if is_perfect else 15158332  # Verde se 100%, Vermelho se falhas
+                embed = {
+                    "username": "QA Onboarding Bot",
+                    "embeds": [
+                        {
+                            "title": "📊 Relatório de Execução de QA - Onboarding",
+                            "color": color,
+                            "fields": [
+                                {"name": "Total de Testes", "value": str(summary_data.get("total_tests", 0)), "inline": True},
+                                {"name": "Sucessos", "value": f"✅ {summary_data.get('success_count', 0)}", "inline": True},
+                                {"name": "Falhas / Timeouts", "value": f"❌ {summary_data.get('failure_count', 0)} / ⏱️ {summary_data.get('timeout_count', 0)}", "inline": True},
+                                {"name": "Taxa de Sucesso", "value": f"**{summary_data.get('success_rate_percent', 0.0)}%**", "inline": True},
+                                {"name": "Tempo Médio", "value": f"{summary_data.get('avg_duration_ms', 0.0)} ms", "inline": True},
+                                {"name": "Percentil 95 (p95)", "value": f"**{summary_data.get('p95_duration_ms', 0.0)} ms**", "inline": True},
+                            ],
+                            "footer": {"text": "QA Framework • AdsPower + Playwright"},
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ],
+                }
+                try:
+                    resp = await client.post(discord_webhook_url, json=embed)
+                    results["discord"] = resp.status_code in (200, 204)
+                    if results["discord"]:
+                        self.logger.info("Notificação enviada com sucesso para o Discord.")
+                    else:
+                        self.logger.warning("Falha ao enviar para o Discord: HTTP %s", resp.status_code)
+                except Exception as exc:
+                    self.logger.warning("Erro ao conectar no Webhook do Discord: %s", exc)
+
+            # 2. Notificação no Telegram
+            if telegram_bot_token and telegram_chat_id:
+                msg_text = (
+                    "📊 *Relatório de QA - Onboarding*\n\n"
+                    f"• *Total de Testes:* {summary_data.get('total_tests', 0)}\n"
+                    f"• *Sucessos:* ✅ {summary_data.get('success_count', 0)}\n"
+                    f"• *Falhas:* ❌ {summary_data.get('failure_count', 0)}\n"
+                    f"• *Timeouts:* ⏱️ {summary_data.get('timeout_count', 0)}\n"
+                    f"• *Taxa de Sucesso:* {summary_data.get('success_rate_percent', 0.0)}%\n"
+                    f"• *Tempo Médio:* {summary_data.get('avg_duration_ms', 0.0)} ms\n"
+                    f"• *Percentil 95 (p95):* {summary_data.get('p95_duration_ms', 0.0)} ms"
+                )
+                try:
+                    tg_url = f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage"
+                    resp = await client.post(
+                        tg_url,
+                        json={"chat_id": telegram_chat_id, "text": msg_text, "parse_mode": "Markdown"},
+                    )
+                    results["telegram"] = resp.status_code == 200
+                    if results["telegram"]:
+                        self.logger.info("Notificação enviada com sucesso para o Telegram.")
+                except Exception as exc:
+                    self.logger.warning("Erro ao enviar notificação para o Telegram: %s", exc)
+
+            # 3. Webhook HTTP Genérico (para o outro sistema)
+            if generic_webhook_url:
+                try:
+                    resp = await client.post(generic_webhook_url, json=summary_data)
+                    results["webhook"] = resp.is_success
+                    if results["webhook"]:
+                        self.logger.info("Payload JSON enviado com sucesso para o Webhook: %s", generic_webhook_url)
+                except Exception as exc:
+                    self.logger.warning("Erro ao enviar payload para o Webhook: %s", exc)
+
+        return results
 

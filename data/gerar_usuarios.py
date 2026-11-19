@@ -40,3 +40,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     gerar_usuarios(args.dominio, args.quantidade, args.senha, args.prefixo_perfil)
+

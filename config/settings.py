@@ -84,6 +84,20 @@ class Settings:
         default_factory=lambda: BASE_DIR / os.getenv("REPORT_DIR", "reports")
     )
 
+    # Notificações e Webhooks (Discord, Telegram e HTTP Genérico)
+    discord_webhook_url: str = field(
+        default_factory=lambda: os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+    )
+    telegram_bot_token: str = field(
+        default_factory=lambda: os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    )
+    telegram_chat_id: str = field(
+        default_factory=lambda: os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    )
+    webhook_url: str = field(
+        default_factory=lambda: os.getenv("WEBHOOK_URL", "").strip()
+    )
+
     # Seletores da UI
     selectors: SelectorsConfig = field(default_factory=SelectorsConfig)
 

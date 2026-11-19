@@ -255,7 +255,23 @@ async def run_framework(args: argparse.Namespace) -> int:
     csv_report_path = reporter.generate_csv_report("resultados.csv")
     json_summary = reporter.generate_json_summary("resumo.json")
 
-    # 7. Apresentação do Sumário Final
+    # 7. Disparo automático de notificações e webhooks (Discord / Telegram / Outro Sistema)
+    if settings.discord_webhook_url or (settings.telegram_bot_token and settings.telegram_chat_id) or settings.webhook_url:
+        logger.info("Enviando notificações e relatórios para canais configurados...")
+        notif_results = await reporter.send_notifications(
+            summary_data=json_summary,
+            discord_webhook_url=settings.discord_webhook_url,
+            telegram_bot_token=settings.telegram_bot_token,
+            telegram_chat_id=settings.telegram_chat_id,
+            generic_webhook_url=settings.webhook_url,
+        )
+        if any(notif_results.values()):
+            if console and RICH_AVAILABLE:
+                console.print("[bold green]✓ Notificação enviada com sucesso para os canais configurados![/bold green]")
+            else:
+                print("✓ Notificação enviada com sucesso para os canais configurados!")
+
+    # 8. Apresentação do Sumário Final
     if console and RICH_AVAILABLE:
         console.print("\n[bold cyan]═══ SUMÁRIO DE EXECUÇÃO DE QA ═══[/bold cyan]")
 

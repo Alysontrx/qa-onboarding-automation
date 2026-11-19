@@ -37,3 +37,4 @@ echo "[✓] INSTALAÇÃO CONCLUÍDA COM SUCESSO!"
 echo "Para executar os testes automatizados: pytest -v"
 echo "Para executar o framework: python main.py"
 echo "=================================================="
+
