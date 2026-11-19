@@ -187,29 +187,66 @@ class QAReporter:
         async with httpx.AsyncClient(timeout=10.0) as client:
             # 1. Notificação no Discord
             if discord_webhook_url:
-                is_perfect = summary_data.get("failure_count", 0) == 0 and summary_data.get("timeout_count", 0) == 0
+                failed_results = [r for r in self._results if r.status != ExecutionStatus.SUCCESS]
+                is_perfect = len(failed_results) == 0
                 color = 3066993 if is_perfect else 15158332  # Verde se 100%, Vermelho se falhas
-                embed = {
-                    "username": "QA Onboarding Bot",
-                    "embeds": [
-                        {
-                            "title": "📊 Relatório de Execução de QA - Onboarding",
-                            "color": color,
-                            "fields": [
-                                {"name": "Total de Testes", "value": str(summary_data.get("total_tests", 0)), "inline": True},
-                                {"name": "Sucessos", "value": f"✅ {summary_data.get('success_count', 0)}", "inline": True},
-                                {"name": "Falhas / Timeouts", "value": f"❌ {summary_data.get('failure_count', 0)} / ⏱️ {summary_data.get('timeout_count', 0)}", "inline": True},
-                                {"name": "Taxa de Sucesso", "value": f"**{summary_data.get('success_rate_percent', 0.0)}%**", "inline": True},
-                                {"name": "Tempo Médio", "value": f"{summary_data.get('avg_duration_ms', 0.0)} ms", "inline": True},
-                                {"name": "Percentil 95 (p95)", "value": f"**{summary_data.get('p95_duration_ms', 0.0)} ms**", "inline": True},
-                            ],
-                            "footer": {"text": "QA Framework • AdsPower + Playwright"},
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        }
-                    ],
+                
+                embed_fields = [
+                    {"name": "Total de Testes", "value": str(summary_data.get("total_tests", 0)), "inline": True},
+                    {"name": "Sucessos", "value": f"✅ {summary_data.get('success_count', 0)}", "inline": True},
+                    {"name": "Falhas / Timeouts", "value": f"❌ {summary_data.get('failure_count', 0)} / ⏱️ {summary_data.get('timeout_count', 0)}", "inline": True},
+                    {"name": "Taxa de Sucesso", "value": f"**{summary_data.get('success_rate_percent', 0.0)}%**", "inline": True},
+                    {"name": "Tempo Médio", "value": f"{summary_data.get('avg_duration_ms', 0.0)} ms", "inline": True},
+                    {"name": "Percentil 95 (p95)", "value": f"**{summary_data.get('p95_duration_ms', 0.0)} ms**", "inline": True},
+                ]
+
+                # Se houver erros, adiciona a lista detalhada de falhas no card do Discord
+                if failed_results:
+                    error_lines = []
+                    for f in failed_results[:6]:  # Exibe os primeiros 6 erros para não estourar o limite do Discord
+                        err_msg = (f.error_message or "Falha não especificada").split("\n")[0][:120]
+                        error_lines.append(f"• **Perfil `{f.profile_id}`** ({f.email})\n  ↳ Etapa: `{f.step}` | Erro: `{err_msg}`")
+                    
+                    if len(failed_results) > 6:
+                        error_lines.append(f"... e mais {len(failed_results) - 6} erro(s) registrados no CSV.")
+
+                    embed_fields.append({
+                        "name": "🚨 Detalhes dos Erros Encontrados",
+                        "value": "\n".join(error_lines),
+                        "inline": False,
+                    })
+
+                embed_data = {
+                    "title": "📊 Relatório de Execução de QA - Onboarding" if is_perfect else "🚨 ALERTA: Falhas Detectadas no Onboarding",
+                    "color": color,
+                    "fields": embed_fields,
+                    "footer": {"text": "QA Framework • AdsPower + Playwright"},
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
+
+                # Se houver screenshot de falha, anexa a imagem direto no Discord
+                screenshot_file = None
+                for f in failed_results:
+                    if f.screenshot_path and Path(f.screenshot_path).is_file():
+                        screenshot_file = Path(f.screenshot_path)
+                        break
+
                 try:
-                    resp = await client.post(discord_webhook_url, json=embed)
+                    if screenshot_file:
+                        embed_data["image"] = {"url": f"attachment://{screenshot_file.name}"}
+                        payload_json = json.dumps({"username": "QA Onboarding Bot", "embeds": [embed_data]})
+                        with screenshot_file.open("rb") as img_f:
+                            files = {
+                                "payload_json": (None, payload_json, "application/json"),
+                                screenshot_file.name: (screenshot_file.name, img_f, "image/png"),
+                            }
+                            resp = await client.post(discord_webhook_url, files=files)
+                    else:
+                        resp = await client.post(
+                            discord_webhook_url,
+                            json={"username": "QA Onboarding Bot", "embeds": [embed_data]},
+                        )
+
                     results["discord"] = resp.status_code in (200, 204)
                     if results["discord"]:
                         self.logger.info("Notificação enviada com sucesso para o Discord.")

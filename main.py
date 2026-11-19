@@ -292,6 +292,21 @@ async def run_framework(args: argparse.Namespace) -> int:
 
         console.print(summary_table)
 
+        # Se houver falhas, exibe tabela dedicada com o detalhamento dos erros
+        failed_list = [r for r in reporter.results if r.status != ExecutionStatus.SUCCESS]
+        if failed_list:
+            fail_table = Table(title="[bold red]DETALHAMENTO DE ERROS E FALHAS ENCONTRADAS[/bold red]", box=box.ROUNDED)
+            fail_table.add_column("Perfil", style="cyan")
+            fail_table.add_column("E-mail", style="yellow")
+            fail_table.add_column("Etapa", style="magenta")
+            fail_table.add_column("Motivo da Falha", style="bold red")
+            fail_table.add_column("Screenshot Salvo", style="dim")
+            for f in failed_list:
+                screen = Path(f.screenshot_path).name if f.screenshot_path else "-"
+                err_clean = (f.error_message or "Erro não especificado").split("\n")[0][:100]
+                fail_table.add_row(f.profile_id, f.email, f.step, err_clean, screen)
+            console.print(fail_table)
+
         files_panel = (
             f"[bold]Relatório CSV:[/bold] {csv_report_path}\n"
             f"[bold]Resumo JSON:[/bold] {settings.report_dir / 'resumo.json'}\n"

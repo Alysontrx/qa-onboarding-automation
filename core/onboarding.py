@@ -144,6 +144,30 @@ async def execute_onboarding(
         current_step = "FILL_NAME"
         await page.fill(sel.name, user_data.name, timeout=timeout)
 
+        # Campos opcionais comuns em páginas de cadastro:
+        # 1. Campo de Confirmação de Senha (se existir na página)
+        try:
+            confirm_pwd_elem = await page.query_selector(
+                "input[name*='confirm'], input[id*='confirm'], input[data-testid*='confirm'], input[name*='repassword']"
+            )
+            if confirm_pwd_elem and await confirm_pwd_elem.is_visible():
+                await confirm_pwd_elem.fill(user_data.password)
+                logger.debug("[%s] Campo de confirmação de senha preenchido.", user_data.profile_id)
+        except Exception:
+            pass
+
+        # 2. Checkbox de Termos de Uso / Política (se existir na página)
+        try:
+            terms_checkbox = await page.query_selector(
+                "input[type='checkbox'][name*='term'], input[type='checkbox'][name*='agree'], input[type='checkbox'][name*='politica'], input[type='checkbox'][required]"
+            )
+            if terms_checkbox and await terms_checkbox.is_visible():
+                if not await terms_checkbox.is_checked():
+                    await terms_checkbox.check()
+                    logger.debug("[%s] Checkbox de termos de uso marcado.", user_data.profile_id)
+        except Exception:
+            pass
+
         # Etapa 4: Submissão do formulário
         current_step = "SUBMIT"
         logger.info(
