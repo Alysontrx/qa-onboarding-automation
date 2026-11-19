@@ -97,6 +97,90 @@ async def _capture_failure_screenshot(
         return None
 
 
+async def dismiss_getting_started_wizard(page: Page, user_name: str = "Alysson") -> bool:
+    """Completa automaticamente todas as etapas do wizard /getting-started da Lovable."""
+    start_time = time.perf_counter()
+    max_wait = 35.0
+
+    while (time.perf_counter() - start_time) < max_wait:
+        cur_url = page.url.lower()
+        if "getting-started" not in cur_url and "onboarding" not in cur_url:
+            logger.info("Wizard de onboarding /getting-started concluído com sucesso! URL atual: %s", page.url)
+            return True
+
+        logger.info("Avançando etapa do wizard Lovable (/getting-started)...")
+
+        # 1. Tenta selecionar uma opção padrão (ex: 'Escuro', 'Claro' ou qualquer card de estilo/função)
+        try:
+            await page.evaluate("""() => {
+                const els = Array.from(document.querySelectorAll('div, button, span, p'));
+                const escuro = els.find(e => (e.innerText || '').trim().toLowerCase() === 'escuro');
+                if (escuro) escuro.click();
+            }""")
+        except Exception:
+            pass
+
+        # 2. Se houver campo de texto (ex: nome do time, projeto ou nome pessoal), preenche
+        try:
+            inputs = await page.query_selector_all("input[type='text'], input:not([type])")
+            for inp in inputs:
+                if await inp.is_visible():
+                    val = (await inp.input_value()).strip()
+                    if not val:
+                        await inp.fill(user_name or "Alysson")
+                        await asyncio.sleep(0.3)
+        except Exception:
+            pass
+
+        # 3. Tenta clicar nos botões de avançar ou pular
+        clicked = False
+        try:
+            clicked = await page.evaluate("""() => {
+                const btns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+                
+                // Prioridade 1: Botão de Pular se existir
+                const skipBtn = btns.find(b => {
+                    if (b.offsetParent === null) return false;
+                    const t = (b.innerText || b.textContent || '').trim().toLowerCase();
+                    return t === 'pular' || t === 'skip' || t === 'depois' || t === 'mais tarde';
+                });
+                if (skipBtn && !skipBtn.disabled) {
+                    skipBtn.scrollIntoView();
+                    skipBtn.click();
+                    return true;
+                }
+
+                // Prioridade 2: Botão de Avançar / Continuar
+                const nextBtn = btns.find(b => {
+                    if (b.offsetParent === null) return false;
+                    const t = (b.innerText || b.textContent || '').trim().toLowerCase();
+                    return t === 'avançar' || t === 'continuar' || t === 'começar' || t === 'próximo' || t === 'next' || t === 'continue';
+                });
+                if (nextBtn && !nextBtn.disabled) {
+                    nextBtn.scrollIntoView();
+                    nextBtn.click();
+                    return true;
+                }
+
+                return false;
+            }""")
+        except Exception:
+            pass
+
+        if not clicked:
+            try:
+                btn_loc = page.locator("button:has-text('Avançar'), button:has-text('Continuar'), button:has-text('Começar'), button:has-text('Pular')").first
+                if await btn_loc.is_visible(timeout=2000):
+                    await btn_loc.click(force=True)
+                    clicked = True
+            except Exception:
+                pass
+
+        await asyncio.sleep(1.5)
+
+    return "getting-started" not in page.url.lower()
+
+
 async def execute_onboarding(
     page: Page,
     user_data: UserData,
@@ -521,6 +605,10 @@ async def execute_onboarding(
             except Exception:
                 pass
 
+            # Se cair em /getting-started após a ativação, resolve imediatamente
+            if "getting-started" in page.url.lower():
+                await dismiss_getting_started_wizard(page, user_data.name)
+
             # Aguarda validação da página de ativação
             current_step = "VERIFY_ACTIVATION"
             try:
@@ -552,6 +640,13 @@ async def execute_onboarding(
                 await page.goto(remix_url, wait_until="domcontentloaded", timeout=timeout)
                 await asyncio.sleep(3.0)
 
+                # Se o Lovable interceptar com o wizard de onboarding (/getting-started)
+                if "getting-started" in page.url.lower() or "onboarding" in page.url.lower():
+                    logger.info("[%s] [ÁRVORE REMIX] Wizard de configuração inicial (/getting-started) detectado. Avançando etapas...", user_data.profile_id)
+                    await dismiss_getting_started_wizard(page, user_data.name)
+                    await page.goto(remix_url, wait_until="domcontentloaded", timeout=timeout)
+                    await asyncio.sleep(3.0)
+
                 # Se foi redirecionado para login, autentica automaticamente
                 if "login" in page.url.lower():
                     logger.info("[%s] [ÁRVORE REMIX] Redirecionado para login. Autenticando conta recém-ativada...", user_data.profile_id)
@@ -571,8 +666,20 @@ async def execute_onboarding(
                                     await entrar_btn.click()
                                 await page.wait_for_url(lambda u: "login" not in u.lower(), timeout=15000)
                                 logger.info("[%s] [ÁRVORE REMIX] Login concluído com sucesso!", user_data.profile_id)
+
+                                # Se após o login cair no wizard /getting-started
+                                if "getting-started" in page.url.lower():
+                                    await dismiss_getting_started_wizard(page, user_data.name)
+                                    await page.goto(remix_url, wait_until="domcontentloaded", timeout=timeout)
+                                    await asyncio.sleep(3.0)
                     except Exception as login_err:
                         logger.warning("[%s] [ÁRVORE REMIX] Falha na autenticação pós-redirect: %s", user_data.profile_id, login_err)
+
+                # Se ainda estiver no wizard /getting-started
+                if "getting-started" in page.url.lower():
+                    await dismiss_getting_started_wizard(page, user_data.name)
+                    await page.goto(remix_url, wait_until="domcontentloaded", timeout=timeout)
+                    await asyncio.sleep(3.0)
 
                 # Garante que está na URL de remix
                 if "remix" not in page.url.lower():
