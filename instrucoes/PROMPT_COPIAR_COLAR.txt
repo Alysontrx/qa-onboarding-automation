@@ -59,3 +59,4 @@ Passo 5: Validar a Execução e Relatório
 Confirme se os cadastros foram concluídos, se as ativações foram validadas e verifique o envio do relatório para o canal do Discord #relatorios-qa.
 
 Por favor, comece executando o Passo 1 (diagnóstico) e me diga o status atual da máquina e do AdsPower!
+
