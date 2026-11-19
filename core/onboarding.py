@@ -244,6 +244,17 @@ async def execute_onboarding(
                 )
                 await page.goto(activation_url, wait_until="domcontentloaded", timeout=timeout)
 
+                # Se a página de ativação exigir clique em botão (ex: "Confirmar", "Ativar", "Continuar")
+                try:
+                    activate_btn = await page.query_selector(
+                        "button:has-text('confirm'), button:has-text('ativar'), button:has-text('verify'), a:has-text('confirm'), button:has-text('continuar')"
+                    )
+                    if activate_btn and await activate_btn.is_visible():
+                        await activate_btn.click(timeout=3000)
+                        logger.debug("[%s] Botão de confirmação de ativação clicado.", user_data.profile_id)
+                except Exception:
+                    pass
+
                 # Aguarda validação da página de ativação
                 current_step = "VERIFY_ACTIVATION"
                 try:
