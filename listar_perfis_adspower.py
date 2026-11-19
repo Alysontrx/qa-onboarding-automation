@@ -94,3 +94,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     listar_perfis(sync_csv=args.sync_csv, dominio=args.dominio)
+

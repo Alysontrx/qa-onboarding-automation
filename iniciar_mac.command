@@ -47,3 +47,4 @@ echo "=========================================================="
 echo "Execução finalizada. Verifique o Discord (#relatorios-qa)!"
 echo "=========================================================="
 read -p "Pressione [ENTER] para fechar..."
+
