@@ -107,10 +107,24 @@ class BrowserManager:
 
             try:
                 logger.info("Conectando Playwright ao WebSocket CDP: %s", ws_endpoint)
-                browser = await playwright.chromium.connect_over_cdp(
-                    ws_endpoint,
-                    timeout=self.settings.default_timeout,
-                )
+                browser = None
+                for cdp_attempt in range(1, 4):
+                    try:
+                        browser = await playwright.chromium.connect_over_cdp(
+                            ws_endpoint,
+                            timeout=self.settings.default_timeout,
+                        )
+                        break
+                    except Exception as cdp_err:
+                        if cdp_attempt < 3:
+                            logger.warning(
+                                "Aguardando porta CDP do AdsPower (%s) responder (tentativa %d/3)...",
+                                profile_id,
+                                cdp_attempt,
+                            )
+                            await asyncio.sleep(1.0)
+                        else:
+                            raise cdp_err
 
                 # AdsPower já possui um contexto e aba principal
                 contexts = browser.contexts

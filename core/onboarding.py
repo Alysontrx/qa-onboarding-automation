@@ -130,40 +130,64 @@ async def execute_onboarding(
         await page.goto(target_url, wait_until="domcontentloaded", timeout=timeout)
 
         # Lida com eventual banner de consentimento de cookies (ex: Lovable)
-        try:
-            consent_btn = await page.query_selector(
-                "[data-testid='consent-accept-all-button'], button:has-text('Accept all'), button:has-text('Aceitar todos')"
-            )
-            if consent_btn and await consent_btn.is_visible():
-                await consent_btn.click(timeout=3000)
-                logger.debug("[%s] Banner de cookies aceito.", user_data.profile_id)
-                await asyncio.sleep(0.5)
-        except Exception:
-            pass
+        async def try_dismiss_cookies():
+            try:
+                for sel_cookie in [
+                    "button:has-text('Aceitar todos')",
+                    "button:has-text('Accept all')",
+                    "button:has-text('Rejeitar todos')",
+                    "[data-testid='consent-accept-all-button']",
+                    "button:has-text('Aceitar')",
+                ]:
+                    btn = await page.query_selector(sel_cookie)
+                    if btn and await btn.is_visible():
+                        await btn.click()
+                        logger.debug("[%s] Banner de cookies aceito/fechado.", user_data.profile_id)
+                        await asyncio.sleep(0.5)
+                        break
+            except Exception:
+                pass
+
+        await try_dismiss_cookies()
 
         # Etapa 2: Localização e validação dos campos do formulário
         current_step = "IDENTIFY_FIELDS"
+        await try_dismiss_cookies()
         await page.wait_for_selector(sel.email, timeout=timeout, state="visible")
 
         # Etapa 3: Preenchimento dos dados do usuário
         current_step = "FILL_EMAIL"
         await page.fill(sel.email, user_data.email, timeout=timeout)
+        await asyncio.sleep(0.5)
 
         # Se o campo de senha ainda não estiver visível (fluxo de 2 etapas como Lovable), avança a primeira etapa
         try:
             pwd_elem = await page.query_selector(sel.password)
             if not pwd_elem or not await pwd_elem.is_visible():
-                step1_btn = await page.query_selector(
-                    "button:has-text('Continue'), [data-testid='auth-submit-button'], button[type='submit']"
-                )
-                if step1_btn and await step1_btn.is_visible():
-                    logger.debug("[%s] Formulário em 2 etapas detectado; avançando etapa de e-mail...", user_data.profile_id)
-                    await step1_btn.click(timeout=timeout)
-                    await asyncio.sleep(1.0)
-        except Exception:
-            pass
+                step1_selectors = [
+                    "button:has-text('Continuar')",
+                    "button:has-text('Continue')",
+                    "button:has-text('Avançar')",
+                    "[data-testid='auth-submit-button']",
+                    "button[type='submit']",
+                ]
+                clicked = False
+                for s1 in step1_selectors:
+                    step1_btn = await page.query_selector(s1)
+                    if step1_btn and await step1_btn.is_visible():
+                        logger.info("[%s] Formulário em 2 etapas detectado; clicando em '%s'...", user_data.profile_id, s1)
+                        await step1_btn.click(timeout=timeout)
+                        clicked = True
+                        break
+                if not clicked:
+                    logger.info("[%s] Pressionando Enter no campo de e-mail para avançar...", user_data.profile_id)
+                    await page.press(sel.email, "Enter")
+                await asyncio.sleep(1.5)
+        except Exception as exc:
+            logger.debug("[%s] Falha ao avançar etapa 1: %s", user_data.profile_id, exc)
 
         current_step = "FILL_PASSWORD"
+        await try_dismiss_cookies()
         await page.wait_for_selector(sel.password, timeout=timeout, state="visible")
         # Preenche a senha diretamente sem expor seu valor nos logs
         await page.fill(sel.password, user_data.password, timeout=timeout)
@@ -208,13 +232,30 @@ async def execute_onboarding(
             user_data.profile_id,
             user_data.masked_email,
         )
-        submit_btn = await page.query_selector(
-            "button:has-text('Create your account'), [data-testid='auth-submit-button'], [data-testid='btn-submit'], button[type='submit']"
-        )
-        if submit_btn and await submit_btn.is_visible():
+        submit_btn = None
+        for s_btn in [
+            "button:has-text('Continuar')",
+            "button:has-text('Create your account')",
+            "button:has-text('Criar conta')",
+            "button:has-text('Crie sua conta')",
+            "button:has-text('Cadastrar')",
+            "button:has-text('Sign up')",
+            "[data-testid='auth-submit-button']",
+            "[data-testid='btn-submit']",
+            "button[type='submit']",
+        ]:
+            elem = await page.query_selector(s_btn)
+            if elem and await elem.is_visible():
+                submit_btn = elem
+                break
+
+        if submit_btn:
             await submit_btn.click(timeout=timeout)
         else:
-            await page.click(sel.submit, timeout=timeout)
+            try:
+                await page.click(sel.submit, timeout=timeout)
+            except Exception:
+                await page.press(sel.password, "Enter")
 
         # Etapa 5: Aguardar confirmação de sucesso ou mensagem de erro
         current_step = "AWAIT_CONFIRMATION"
