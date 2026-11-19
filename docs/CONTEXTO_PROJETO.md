@@ -102,39 +102,36 @@ Ao terminar a execução, o outro sistema deve ler o arquivo **`reports/resumo.j
 
 ## 4. Dúvidas Operacionais e Configurações
 
-* **Onde ativar a Local API no AdsPower (macOS):**
-  * Menu superior do Mac: `Adspower global` ➔ `Preferências...` (ou atalho `Cmd + ,`), aba **Local API** ➔ ativar chave seletora ➔ confirmar porta `50325`.
-  * Ou no canto superior direito da janela do AdsPower: clicar no avatar do usuário ➔ `Configurações` ➔ aba `Local API`.
+* **Onde ativar a Local API no AdsPower:**
+  * **No Windows:** No AdsPower, clique no ícone da engrenagem ⚙️ (ou clique no avatar do usuário no canto superior direito ➔ `Configurações`) ➔ aba `Local API` ➔ ativar chave seletora ➔ confirmar porta `50325`.
+  * **No macOS:** Menu superior: `Adspower global` ➔ `Preferências...` ➔ aba `Local API`.
 * **Identificador de Perfil:**
   * O número que aparece na coluna **`Nº`** (ex: `1`) pode ser colocado diretamente no arquivo `data/usuarios.csv`. O código detecta se é número e envia `serial_number=1` automaticamente.
 
 ---
 
-## 5. Como Rodar em Qualquer Computador
+## 5. Como Rodar no Windows (Execução Rápida em 1 Clique)
 
+No Windows, você não precisa digitar comandos no terminal:
+1. Abra o **AdsPower** e ative a Local API.
+2. Dê **dois cliques** no arquivo `iniciar_windows.bat`.
+3. Ele instala as dependências automaticamente e inicia a automação!
+
+Caso prefira rodar via PowerShell/Prompt de Comando:
 ```bash
 # 1. Clonar o repositório
 git clone https://github.com/Alysontrx/qa-onboarding-automation.git
 cd qa-onboarding-automation
 
-# 2. Criar e ativar o ambiente virtual
-python3 -m venv .venv
-source .venv/bin/activate  # (.venv\Scripts\Activate.ps1 no Windows)
+# 2. Criar e ativar o ambiente virtual no Windows
+python -m venv .venv
+.venv\Scripts\activate.bat
 
 # 3. Instalar dependências
 pip install -r requirements.txt
 playwright install chromium
 
-# 4. Validar os testes automatizados
+# 4. Executar os testes ou a automação
 pytest -v
-
-# 5. Criar arquivo .env e configurar suas variáveis
-cp .env.example .env
-
-# 6. Executar o framework:
-# Modo Local (Playwright Standalone, sem AdsPower):
-python main.py --local --no-headless --url http://127.0.0.1:8080/register
-
-# Modo AdsPower (conectando na Local API):
 python main.py --use-adspower --concurrency 2
 ```
