@@ -42,3 +42,4 @@ echo [OK] INSTALACAO CONCLUIDA COM SUCESSO!
 echo Para executar a automacao, use: iniciar_windows.bat
 echo ==========================================================
 pause
+

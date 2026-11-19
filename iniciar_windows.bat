@@ -55,3 +55,4 @@ echo ==========================================================
 echo Execucao finalizada. Verifique o Discord (#relatorios-qa)!
 echo ==========================================================
 pause
+
