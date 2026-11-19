@@ -56,3 +56,4 @@ async def test_wait_for_activation_link_timeout():
         poll_interval=0.05,
     )
     assert link is None
+

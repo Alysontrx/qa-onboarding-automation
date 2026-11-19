@@ -228,3 +228,4 @@ class EmailVerifier:
 
         logger.warning("Tempo esgotado aguardando e-mail de ativação para '%s'.", recipient_email)
         return None
+
