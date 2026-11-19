@@ -8,6 +8,13 @@ echo     SIXTYSIX - QA ONBOARDING AUTOMATION (WINDOWS)
 echo ==========================================================
 echo.
 
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts;%PATH%"
+    )
+)
+
 :: Se o ambiente virtual não existir, instala automaticamente
 if not exist ".venv" (
     echo [*] Ambiente virtual nao detectado. Realizando instalacao inicial...
@@ -32,6 +39,7 @@ echo Como voce deseja executar hoje?
 echo   [1] Rodar com ADSPOWER (Perfis Reais)
 echo   [2] Rodar LOCAL (Playwright Standalone)
 echo   [3] Sincronizar perfis do AdsPower para o usuarios.csv
+echo   [4] Conectar / Registrar Ponte no SixtySix Gateway
 echo ==========================================================
 set /p OPCAO="Digite a opcao desejada [1]: "
 if "%OPCAO%"=="" set OPCAO=1
@@ -48,6 +56,10 @@ if "%OPCAO%"=="2" (
 if "%OPCAO%"=="3" (
     echo [*] Consultando perfis na Local API do AdsPower e gerando CSV...
     python listar_perfis_adspower.py --sync-csv
+)
+if "%OPCAO%"=="4" (
+    echo [*] Abrindo conector do SixtySix Gateway...
+    python registrar_no_gateway.py
 )
 
 echo.

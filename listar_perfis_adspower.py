@@ -28,10 +28,20 @@ def listar_perfis(sync_csv: bool = False, dominio: str = "sixtysix.online"):
     settings = get_settings()
     url = f"{settings.adspower_url}/api/v1/user/list"
     params = {"page": 1, "page_size": 100}
+    if settings.adspower_api_key:
+        params["api_key"] = settings.adspower_api_key
+
+    headers = {
+        "Accept": "application/json",
+        "x-mcp-client": "mcp",
+    }
+    if settings.adspower_api_key:
+        headers["Authorization"] = f"Bearer {settings.adspower_api_key}"
+        headers["X-API-KEY"] = settings.adspower_api_key
 
     print(f"[*] Consultando perfis na Local API do AdsPower ({settings.adspower_url})...")
     try:
-        resp = httpx.get(url, params=params, timeout=5.0)
+        resp = httpx.get(url, params=params, headers=headers, timeout=5.0)
     except httpx.ConnectError:
         print(f"[!] ERRO: Não foi possível conectar ao AdsPower em {settings.adspower_url}.")
         print("[!] Verifique se o aplicativo do AdsPower está aberto e com a Local API ligada na porta 50325.")

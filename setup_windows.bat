@@ -10,10 +10,14 @@ echo.
 
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [!] Erro: Python nao encontrado no PATH do Windows.
-    echo Baixe e instale o Python 3.11+ marcando "Add Python to PATH".
-    pause
-    exit /b 1
+    if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts;%PATH%"
+    ) else (
+        echo [!] Erro: Python nao encontrado no PATH do Windows.
+        echo Baixe e instale o Python 3.11+ marcando "Add Python to PATH".
+        pause
+        exit /b 1
+    )
 )
 
 echo [1/4] Criando ambiente virtual (.venv)...
