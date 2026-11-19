@@ -20,6 +20,7 @@ from playwright.async_api import Error as PlaywrightError, Page, TimeoutError as
 
 from config.settings import SelectorsConfig, Settings, get_settings
 from core.csv_loader import UserData
+from core.email_verifier import EmailVerifier
 
 logger = logging.getLogger("qa_framework.onboarding")
 
@@ -199,6 +200,58 @@ async def execute_onboarding(
         duration_ms = (time.perf_counter() - start_time) * 1000.0
 
         if success_task in done and not success_task.cancelled() and not success_task.exception():
+            # Se a verificação por e-mail estiver habilitada, aguarda o link de ativação
+            if cfg.verify_email:
+                current_step = "WAIT_ACTIVATION_EMAIL"
+                logger.info(
+                    "[%s] Formulário submetido. Aguardando e-mail de ativação para '%s'...",
+                    user_data.profile_id,
+                    user_data.masked_email,
+                )
+                verifier = EmailVerifier(
+                    host=cfg.imap_host,
+                    port=cfg.imap_port,
+                    user=cfg.imap_user,
+                    password=cfg.imap_password,
+                )
+                activation_url = await verifier.wait_for_activation_link(
+                    recipient_email=user_data.email,
+                    timeout=cfg.email_wait_timeout,
+                    poll_interval=cfg.email_poll_interval,
+                )
+
+                if not activation_url:
+                    duration_ms = (time.perf_counter() - start_time) * 1000.0
+                    screenshot = await _capture_failure_screenshot(
+                        page, user_data.profile_id, cfg.log_dir, "email_timeout"
+                    )
+                    return ExecutionResult(
+                        profile_id=user_data.profile_id,
+                        email=user_data.masked_email,
+                        status=ExecutionStatus.TIMEOUT,
+                        step="WAIT_ACTIVATION_EMAIL",
+                        duration_ms=duration_ms,
+                        error_message="E-mail de ativação não recebido dentro do tempo limite.",
+                        screenshot_path=screenshot,
+                    )
+
+                # Navega até o link de ativação capturado
+                current_step = "OPEN_ACTIVATION_LINK"
+                logger.info(
+                    "[%s] Abrindo link de ativação no navegador: %s",
+                    user_data.profile_id,
+                    activation_url,
+                )
+                await page.goto(activation_url, wait_until="domcontentloaded", timeout=timeout)
+
+                # Aguarda validação da página de ativação
+                current_step = "VERIFY_ACTIVATION"
+                try:
+                    await page.wait_for_selector(sel.activation_success, timeout=timeout)
+                except Exception:
+                    logger.debug("[%s] Seletor de sucesso de ativação não detectado; página carregada com sucesso.", user_data.profile_id)
+
+            duration_ms = (time.perf_counter() - start_time) * 1000.0
             logger.info(
                 "[%s] Onboarding concluído com SUCESSO em %.2fms",
                 user_data.profile_id,

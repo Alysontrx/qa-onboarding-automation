@@ -32,6 +32,7 @@ class SelectorsConfig:
     submit: str = "[data-testid='btn-submit'], button[type='submit']"
     success_message: str = "[data-testid='success-message'], .success-msg, .alert-success"
     error_message: str = "[data-testid='error-message'], .error-msg, .alert-danger"
+    activation_success: str = "[data-testid='activation-success'], .verified, h1:has-text('sucesso'), h1:has-text('confirmad'), div:has-text('confirmad'), div:has-text('ativad')"
 
 
 @dataclass
@@ -96,6 +97,29 @@ class Settings:
     )
     webhook_url: str = field(
         default_factory=lambda: os.getenv("WEBHOOK_URL", "").strip()
+    )
+
+    # Verificação de E-mail (Ativação automática via IMAP / Catch-All)
+    verify_email: bool = field(
+        default_factory=lambda: os.getenv("VERIFY_EMAIL", "false").lower() in ("true", "1", "yes")
+    )
+    imap_host: str = field(
+        default_factory=lambda: os.getenv("IMAP_HOST", "imap.gmail.com").strip()
+    )
+    imap_port: int = field(
+        default_factory=lambda: int(os.getenv("IMAP_PORT", "993"))
+    )
+    imap_user: str = field(
+        default_factory=lambda: os.getenv("IMAP_USER", "").strip()
+    )
+    imap_password: str = field(
+        default_factory=lambda: os.getenv("IMAP_PASSWORD", "").strip()
+    )
+    email_wait_timeout: int = field(
+        default_factory=lambda: int(os.getenv("EMAIL_WAIT_TIMEOUT", "60"))
+    )
+    email_poll_interval: float = field(
+        default_factory=lambda: float(os.getenv("EMAIL_POLL_INTERVAL", "3.0"))
     )
 
     # Seletores da UI
