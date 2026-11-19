@@ -256,35 +256,71 @@ async def execute_onboarding(
             # Submissão final do formulário
             current_step = "SUBMIT"
             logger.info(
-                "[%s] Senha preenchida. Aguardando verificação do Cloudflare Turnstile e liberação do botão...",
+                "[%s] Senha preenchida. Aguardando verificação do Cloudflare Turnstile e liberação do botão 'Crie sua conta'...",
                 user_data.profile_id,
             )
 
             submit_clicked = False
             start_submit_wait = time.perf_counter()
-            max_submit_wait = 45.0  # Tempo para validação do Turnstile ou clique interativo
+            max_submit_wait = 60.0  # Tempo para validação do Turnstile ou clique interativo
             alerted_user = False
 
             while (time.perf_counter() - start_submit_wait) < max_submit_wait:
+                # 1. Verifica se a página já avançou automaticamente (ex: /pricing ou /projects)
+                cur_url = page.url.lower()
+                if any(x in cur_url for x in ["/pricing", "/projects", "/onboarding"]):
+                    logger.info("[%s] Página avançou automaticamente para '%s'!", user_data.profile_id, cur_url)
+                    submit_clicked = True
+                    break
+
+                # 2. Avalia especificamente o botão VISÍVEL 'Crie sua conta' / cadastro
                 btn_state = await page.evaluate("""() => {
-                    const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-                    let foundAny = false;
-                    let hasDisabled = false;
-                    for (const b of btns) {
+                    const btns = Array.from(document.querySelectorAll('button, [role=\"button\"], input[type=\"submit\"]'));
+                    
+                    // Identifica se Cloudflare Turnstile está na tela
+                    const bodyText = (document.body.innerText || '').toLowerCase();
+                    const hasCloudflare = !!document.querySelector('iframe[src*=\"turnstile\"], iframe[src*=\"cloudflare\"], .cf-turnstile') ||
+                                          bodyText.includes('confirme que é humano') ||
+                                          bodyText.includes('provar que não é um robô');
+                    const isCloudflareSuccess = bodyText.includes('sucesso!') || bodyText.includes('success!');
+
+                    // Procura o botão específico de cadastro visível
+                    const targetBtn = btns.find(b => {
+                        if (!b || b.offsetParent === null) return false;
                         const t = (b.textContent || b.value || '').trim().toLowerCase();
-                        if (t.includes('google') || t.includes('github') || t.includes('apple') || t.includes('sso') || t.includes('editar')) continue;
-                        if (t.includes('crie sua conta') || t.includes('criar conta') || t.includes('create your account') || t.includes('sign up') || t.includes('finalizar cadastro') || b.type === 'submit' || b.getAttribute('data-testid') === 'btn-submit') {
-                            foundAny = true;
-                            const isDisabled = b.disabled || b.hasAttribute('disabled') || b.getAttribute('aria-disabled') === 'true';
-                            if (!isDisabled) {
-                                return { found: true, disabled: false, text: (b.textContent || b.value || '').trim() };
-                            } else {
-                                hasDisabled = true;
-                            }
-                        }
+                        if (t.includes('google') || t.includes('github') || t.includes('apple') || t.includes('sso') || t.includes('editar')) return false;
+                        return t.includes('crie sua conta') || t.includes('criar conta') || t.includes('create your account') || t.includes('finalizar cadastro') || b.getAttribute('data-testid') === 'btn-submit';
+                    });
+
+                    if (!targetBtn) {
+                        return { found: false, disabled: true, text: '', hasCloudflare, isCloudflareSuccess };
                     }
-                    return { found: foundAny, disabled: hasDisabled, text: '' };
+
+                    const isDisabled = targetBtn.disabled ||
+                                       targetBtn.hasAttribute('disabled') ||
+                                       targetBtn.getAttribute('aria-disabled') === 'true' ||
+                                       targetBtn.classList.contains('disabled');
+
+                    return {
+                        found: true,
+                        disabled: isDisabled,
+                        text: (targetBtn.textContent || targetBtn.value || '').trim(),
+                        hasCloudflare,
+                        isCloudflareSuccess
+                    };
                 }""")
+
+                if btn_state.get("hasCloudflare") and btn_state.get("disabled") and not btn_state.get("isCloudflareSuccess"):
+                    if not alerted_user:
+                        logger.warning(
+                            "[%s] [CLOUDFLARE] Caixinha 'Confirme que é humano' detectada! Por favor clique nela na janela do AdsPower!",
+                            user_data.profile_id,
+                        )
+                        print(
+                            f"\n>>> [PERFIL {user_data.profile_id}] Clique na caixinha 'Confirme que é humano' na janela do AdsPower! <<<\n",
+                            flush=True,
+                        )
+                        alerted_user = True
 
                 if btn_state.get("found") and not btn_state.get("disabled"):
                     logger.info(
@@ -293,40 +329,28 @@ async def execute_onboarding(
                         btn_state.get("text") or "Submit",
                     )
                     await page.evaluate("""() => {
-                        const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-                        for (const b of btns) {
+                        const btns = Array.from(document.querySelectorAll('button, [role=\"button\"], input[type=\"submit\"]'));
+                        const targetBtn = btns.find(b => {
+                            if (!b || b.offsetParent === null) return false;
                             const t = (b.textContent || b.value || '').trim().toLowerCase();
-                            if (t.includes('google') || t.includes('github') || t.includes('apple') || t.includes('sso') || t.includes('editar')) continue;
-                            if (t.includes('crie sua conta') || t.includes('criar conta') || t.includes('create your account') || t.includes('sign up') || t.includes('finalizar cadastro') || b.type === 'submit' || b.getAttribute('data-testid') === 'btn-submit') {
-                                const isDisabled = b.disabled || b.hasAttribute('disabled') || b.getAttribute('aria-disabled') === 'true';
-                                if (!isDisabled) {
-                                    b.scrollIntoView();
-                                    b.click();
-                                    return true;
-                                }
-                            }
+                            if (t.includes('google') || t.includes('github') || t.includes('apple') || t.includes('sso') || t.includes('editar')) return false;
+                            return t.includes('crie sua conta') || t.includes('criar conta') || t.includes('create your account') || t.includes('finalizar cadastro') || b.getAttribute('data-testid') === 'btn-submit';
+                        });
+                        if (targetBtn && !targetBtn.disabled) {
+                            targetBtn.scrollIntoView();
+                            targetBtn.click();
+                            return true;
                         }
                         return false;
                     }""")
                     try:
-                        loc = page.locator("button:has-text('Crie sua conta'), button:has-text('Criar conta'), button:has-text('Create your account'), [data-testid='btn-submit'], button[type='submit']").first
+                        loc = page.locator("button:has-text('Crie sua conta'), button:has-text('Criar conta'), button:has-text('Create your account'), [data-testid='btn-submit']").first
                         if await loc.is_visible():
                             await loc.click(force=True, timeout=2000)
                     except Exception:
                         pass
                     submit_clicked = True
                     break
-
-                if btn_state.get("disabled") and not alerted_user:
-                    logger.warning(
-                        "[%s] [CLOUDFLARE] Botão desabilitado aguardando verificação anti-robô. Se houver caixa 'Provar que não é um robô', clique nela na janela do AdsPower!",
-                        user_data.profile_id,
-                    )
-                    print(
-                        f"\n>>> [PERFIL {user_data.profile_id}] Clique na caixinha do Cloudflare na janela do AdsPower se for solicitada! <<<\n",
-                        flush=True,
-                    )
-                    alerted_user = True
 
                 err_elem = await page.query_selector(sel.error_message)
                 if err_elem and await err_elem.is_visible():
@@ -347,20 +371,43 @@ async def execute_onboarding(
         elif success_early_task in done_early and not success_early_task.cancelled() and not success_early_task.exception():
             logger.info("[%s] Lovable avançou diretamente para envio de link mágico sem exigir senha!", user_data.profile_id)
 
-        # Etapa 5: Aguardar confirmação de sucesso ou mensagem de erro
+        # Etapa 5: Aguardar confirmação de sucesso, planos (/pricing) ou erro
         current_step = "AWAIT_CONFIRMATION"
 
         error_detected = None
+        already_logged_in = False
         success_detected = False
         start_conf_wait = time.perf_counter()
 
-        while (time.perf_counter() - start_conf_wait) < 12.0:
+        while (time.perf_counter() - start_conf_wait) < 20.0:
+            cur_url = page.url.lower()
+
+            # 1. Verifica se avançou para a tela de Preços/Planos (/pricing) ou Projetos (/projects)
+            if any(x in cur_url for x in ["/pricing", "/projects", "/onboarding"]):
+                logger.info("[%s] Redirecionamento detectado para '%s'! Usuário logado com sucesso.", user_data.profile_id, cur_url)
+                already_logged_in = True
+                success_detected = True
+                break
+
+            # 2. Verifica se renderizou a tela de Preços/Planos
+            page_text_check = await page.evaluate("""() => {
+                const txt = (document.body.innerText || '').toLowerCase();
+                return txt.includes('preços') || txt.includes('pricing') || (txt.includes('free') && txt.includes('r$'));
+            }""")
+            if page_text_check:
+                logger.info("[%s] Tela de seleção de plano detectada na página!", user_data.profile_id)
+                already_logged_in = True
+                success_detected = True
+                break
+
+            # 3. Verifica mensagem de erro na interface
             error_elem = await page.query_selector(sel.error_message)
             if error_elem and await error_elem.is_visible():
                 error_detected = (await error_elem.inner_text()).strip()
                 if error_detected:
                     break
 
+            # 4. Verifica mensagens tradicionais de sucesso
             try:
                 success_elem = await page.query_selector(sel.success_message)
                 if success_elem and await success_elem.is_visible():
@@ -368,20 +415,6 @@ async def execute_onboarding(
                     break
             except Exception:
                 pass
-
-            page_text_match = await page.evaluate("""() => {
-                const bodyText = (document.body.innerText || '').toLowerCase();
-                return bodyText.includes('check your email') ||
-                       bodyText.includes('verifique seu e-mail') ||
-                       bodyText.includes('sent you a link') ||
-                       bodyText.includes('enviamos um link') ||
-                       bodyText.includes('enviamos um e-mail') ||
-                       bodyText.includes('confirme seu e-mail');
-            }""")
-            if page_text_match:
-                logger.info("[%s] Indicação de confirmação detectada no texto da página!", user_data.profile_id)
-                success_detected = True
-                break
 
             await asyncio.sleep(1.0)
 
@@ -405,8 +438,31 @@ async def execute_onboarding(
                 screenshot_path=screenshot,
             )
 
-        if cfg.verify_email and not ("127.0.0.1" in target_url or "localhost" in target_url):
-            # Se a verificação por e-mail estiver habilitada, aguarda o link de ativação
+        # Se caiu na tela de planos (Preços / Free), clica em 'Começar' no plano Free
+        if already_logged_in or "pricing" in page.url.lower():
+            try:
+                logger.info("[%s] Tela de planos detectada. Clicando em 'Começar' no plano Free...", user_data.profile_id)
+                clicked_comecar = await page.evaluate("""() => {
+                    const btns = Array.from(document.querySelectorAll('button, a'));
+                    const comecarBtn = btns.find(b => {
+                        const t = (b.textContent || '').trim().toLowerCase();
+                        return t === 'começar' || t === 'get started' || t.includes('começar');
+                    });
+                    if (comecarBtn) {
+                        comecarBtn.scrollIntoView();
+                        comecarBtn.click();
+                        return true;
+                    }
+                    return false;
+                }""")
+                if clicked_comecar:
+                    logger.info("[%s] Botão 'Começar' do plano Free acionado com sucesso!", user_data.profile_id)
+                    await asyncio.sleep(2.0)
+            except Exception as exc:
+                logger.debug("[%s] Não foi necessário clicar em Começar: %s", user_data.profile_id, exc)
+
+        elif cfg.verify_email and not ("127.0.0.1" in target_url or "localhost" in target_url):
+            # Se não foi para planos nem logou direto, aguarda o e-mail de ativação via IMAP
             current_step = "WAIT_ACTIVATION_EMAIL"
             logger.info(
                 "[%s] Formulário submetido. Aguardando e-mail de ativação para '%s'...",
