@@ -183,13 +183,40 @@ class BrowserManager:
                 raise AdsPowerError(f"Falha ao conectar CDP Playwright: {exc}") from exc
 
         else:
-            # Modo Local (Playwright Standalone)
-            logger.info("Iniciando Chromium local para o perfil '%s'...", profile_id)
-            browser = await playwright.chromium.launch(
-                headless=self.settings.headless,
-                timeout=self.settings.default_timeout,
+            # Modo Local (Google Chrome Real do Usuário)
+            logger.info(
+                "Iniciando Google Chrome oficial para o perfil '%s' (Headless: %s)...",
+                profile_id,
+                self.settings.headless,
             )
-            context = await browser.new_context()
+            chrome_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-default-browser-check",
+                "--no-first-run",
+            ]
+            try:
+                browser = await playwright.chromium.launch(
+                    channel="chrome",
+                    headless=self.settings.headless,
+                    args=chrome_args,
+                    timeout=self.settings.default_timeout,
+                )
+            except Exception as chrome_err:
+                logger.warning(
+                    "Não foi possível iniciar canal 'chrome' (%s). Usando Chromium Playwright integrado...",
+                    chrome_err,
+                )
+                browser = await playwright.chromium.launch(
+                    headless=self.settings.headless,
+                    args=chrome_args,
+                    timeout=self.settings.default_timeout,
+                )
+
+            context = await browser.new_context(
+                viewport={"width": 1280, "height": 850},
+                locale="pt-BR",
+                timezone_id="America/Sao_Paulo",
+            )
             page = await context.new_page()
 
             session = BrowserSession(
