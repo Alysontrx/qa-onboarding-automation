@@ -264,6 +264,7 @@ async def run_framework(args: argparse.Namespace) -> int:
             telegram_bot_token=settings.telegram_bot_token,
             telegram_chat_id=settings.telegram_chat_id,
             generic_webhook_url=settings.webhook_url,
+            csv_file_path=csv_report_path,
         )
         if any(notif_results.values()):
             if console and RICH_AVAILABLE:

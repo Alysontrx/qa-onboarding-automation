@@ -181,10 +181,11 @@ class QAReporter:
         telegram_bot_token: str = "",
         telegram_chat_id: str = "",
         generic_webhook_url: str = "",
+        csv_file_path: Optional[Path] = None,
     ) -> Dict[str, bool]:
         """Dispara notificações para Discord, Telegram e Webhook HTTP após os testes."""
         results = {"discord": False, "telegram": False, "webhook": False}
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             # 1. Notificação no Discord
             if discord_webhook_url:
                 failed_results = [r for r in self._results if r.status != ExecutionStatus.SUCCESS]
@@ -203,7 +204,7 @@ class QAReporter:
                 # Se houver erros, adiciona a lista detalhada de falhas no card do Discord
                 if failed_results:
                     error_lines = []
-                    for f in failed_results[:6]:  # Exibe os primeiros 6 erros para não estourar o limite do Discord
+                    for f in failed_results[:6]:
                         err_msg = (f.error_message or "Falha não especificada").split("\n")[0][:120]
                         error_lines.append(f"• **Perfil `{f.profile_id}`** ({f.email})\n  ↳ Etapa: `{f.step}` | Erro: `{err_msg}`")
                     
@@ -224,23 +225,33 @@ class QAReporter:
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
 
-                # Se houver screenshot de falha, anexa a imagem direto no Discord
+                # Anexos: Screenshot (se houver falha) e Planilha CSV de resultados
                 screenshot_file = None
                 for f in failed_results:
                     if f.screenshot_path and Path(f.screenshot_path).is_file():
                         screenshot_file = Path(f.screenshot_path)
                         break
 
+                csv_target = csv_file_path or (self.report_dir / "resultados.csv")
+                csv_exists = csv_target and Path(csv_target).is_file()
+
                 try:
-                    if screenshot_file:
-                        embed_data["image"] = {"url": f"attachment://{screenshot_file.name}"}
+                    if screenshot_file or csv_exists:
+                        if screenshot_file:
+                            embed_data["image"] = {"url": f"attachment://{screenshot_file.name}"}
+
                         payload_json = json.dumps({"username": "QA Onboarding Bot", "embeds": [embed_data]})
-                        with screenshot_file.open("rb") as img_f:
-                            files = {
-                                "payload_json": (None, payload_json, "application/json"),
-                                screenshot_file.name: (screenshot_file.name, img_f, "image/png"),
-                            }
-                            resp = await client.post(discord_webhook_url, files=files)
+                        files = {
+                            "payload_json": (None, payload_json, "application/json"),
+                        }
+
+                        if screenshot_file:
+                            files[screenshot_file.name] = (screenshot_file.name, screenshot_file.read_bytes(), "image/png")
+
+                        if csv_exists:
+                            files["resultados.csv"] = ("resultados.csv", Path(csv_target).read_bytes(), "text/csv")
+
+                        resp = await client.post(discord_webhook_url, files=files)
                     else:
                         resp = await client.post(
                             discord_webhook_url,
@@ -249,7 +260,7 @@ class QAReporter:
 
                     results["discord"] = resp.status_code in (200, 204)
                     if results["discord"]:
-                        self.logger.info("Notificação enviada com sucesso para o Discord.")
+                        self.logger.info("Notificação enviada com sucesso para o Discord com anexos.")
                     else:
                         self.logger.warning("Falha ao enviar para o Discord: HTTP %s", resp.status_code)
                 except Exception as exc:
