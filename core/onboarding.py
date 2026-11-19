@@ -132,28 +132,22 @@ async def execute_onboarding(
         # Lida com eventual banner de consentimento de cookies (ex: Lovable)
         async def try_dismiss_cookies():
             try:
-                for sel_cookie in [
-                    "button:has-text('Aceitar todos')",
-                    "button:has-text('Accept all')",
-                    "button:has-text('Rejeitar todos')",
-                    "[data-testid='consent-accept-all-button']",
-                    "button:has-text('Aceitar')",
-                ]:
-                    btn = await page.query_selector(sel_cookie)
-                    if btn and await btn.is_visible():
-                        await btn.click()
-                        logger.debug("[%s] Banner de cookies aceito/fechado.", user_data.profile_id)
-                        await asyncio.sleep(0.3)
-                        return
-            except Exception:
-                pass
-
-            # Fallback nativo via JavaScript para fechar qualquer banner de cookies imediatamente
-            try:
                 await page.evaluate("""() => {
                     const btns = Array.from(document.querySelectorAll('button'));
-                    const cookieBtn = btns.find(b => b.textContent && (b.textContent.includes('Aceitar todos') || b.textContent.includes('Accept all') || b.textContent.includes('Aceitar')));
-                    if (cookieBtn) cookieBtn.click();
+                    const cookieBtn = btns.find(b => {
+                        const t = (b.textContent || '').trim().toLowerCase();
+                        return t.includes('aceitar todos') || t.includes('accept all') || t.includes('aceitar') || t.includes('rejeitar');
+                    });
+                    if (cookieBtn) {
+                        cookieBtn.click();
+                    }
+                    document.querySelectorAll('div').forEach(d => {
+                        const style = window.getComputedStyle(d);
+                        const txt = (d.innerText || '').toLowerCase();
+                        if (style.position === 'fixed' && (txt.includes('cookies') || txt.includes('privacidade'))) {
+                            d.remove();
+                        }
+                    });
                 }""")
             except Exception:
                 pass
@@ -170,37 +164,35 @@ async def execute_onboarding(
         await page.fill(sel.email, user_data.email, timeout=timeout)
         await asyncio.sleep(0.5)
 
-        def is_oauth(text: str) -> bool:
-            low = text.lower()
-            return any(k in low for k in ["google", "github", "apple", "microsoft", "sso"])
-
         # Se o campo de senha ainda não estiver visível (fluxo de 2 etapas como Lovable), avança a primeira etapa
         try:
             pwd_elem = await page.query_selector(sel.password)
             if not pwd_elem or not await pwd_elem.is_visible():
-                step1_btn = None
-                buttons = await page.query_selector_all("button[type='submit'], form button, button")
-                for b in buttons:
-                    try:
-                        if not await b.is_visible():
-                            continue
-                        b_text = (await b.inner_text()).strip()
-                        if is_oauth(b_text):
-                            continue
-                        if any(w in b_text.lower() for w in ["continuar", "continue", "avançar", "sign up", "cadastrar"]):
-                            step1_btn = b
-                            break
-                    except Exception:
-                        continue
-
-                if step1_btn:
-                    b_name = (await step1_btn.inner_text()).strip()
-                    logger.info("[%s] Formulário em 2 etapas detectado; clicando em '%s'...", user_data.profile_id, b_name)
-                    await step1_btn.click(timeout=timeout)
+                await try_dismiss_cookies()
+                clicked_js = await page.evaluate("""() => {
+                    const btns = Array.from(document.querySelectorAll('button'));
+                    const target = btns.find(b => {
+                        const t = (b.textContent || '').trim().toLowerCase();
+                        if (t.includes('google') || t.includes('github') || t.includes('apple') || t.includes('sso')) return false;
+                        return t === 'continuar' || t === 'continue' || t.includes('continuar') || b.type === 'submit';
+                    });
+                    if (target) {
+                        target.scrollIntoView();
+                        target.click();
+                        return target.textContent.trim();
+                    }
+                    return null;
+                }""")
+                if clicked_js:
+                    logger.info("[%s] Botão '%s' acionado com sucesso!", user_data.profile_id, clicked_js)
                 else:
-                    logger.info("[%s] Pressionando Enter no campo de e-mail para avançar...", user_data.profile_id)
-                    await page.press(sel.email, "Enter")
+                    logger.info("[%s] Botão não localizado via JS. Tentando via Playwright...", user_data.profile_id)
+                    btn = await page.query_selector("button:text-is('Continuar'), button:text-is('Continue'), button[type='submit']")
+                    if btn:
+                        await btn.click(force=True)
 
+                # Pressiona Enter no campo de e-mail por garantia
+                await page.press(sel.email, "Enter")
                 await asyncio.sleep(2.0)
         except Exception as exc:
             logger.debug("[%s] Falha ao avançar etapa de e-mail: %s", user_data.profile_id, exc)

@@ -136,6 +136,31 @@ class BrowserManager:
                 pages = context.pages
                 page = pages[0] if pages else await context.new_page()
 
+                # Desativa emulação de celular e limitações de rede (Fast 4G) herdadas do perfil AdsPower
+                try:
+                    cdp = await context.new_cdp_session(page)
+                    await cdp.send("Network.emulateNetworkConditions", {
+                        "offline": False,
+                        "latency": 0,
+                        "downloadThroughput": -1,
+                        "uploadThroughput": -1,
+                    })
+                    await cdp.send("Emulation.setTouchEmulationEnabled", {"enabled": False})
+                    await cdp.send("Emulation.setDeviceMetricsOverride", {
+                        "width": 1280,
+                        "height": 900,
+                        "deviceScaleFactor": 1,
+                        "mobile": False,
+                    })
+                    logger.info("[%s] Resolução ajustada para Desktop (1280x900) e throttling de rede desligado.", profile_id)
+                except Exception as cdp_over_err:
+                    logger.debug("[%s] Não foi possível aplicar overrides de mobile via CDP: %s", profile_id, cdp_over_err)
+
+                try:
+                    await page.set_viewport_size({"width": 1280, "height": 900})
+                except Exception:
+                    pass
+
                 session = BrowserSession(
                     profile_id=profile_id,
                     playwright=playwright,
