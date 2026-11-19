@@ -38,7 +38,20 @@ Este documento unifica **100% do contexto técnico, arquitetura, histórico, Pla
 
 ---
 
-## 3. Criação e Ativação de Contas com Domínio Próprio (`@sixtysix.online`)
+## 3. Aplicação Alvo: Lovable (`lovable.dev`)
+
+* **URL de Cadastro:** `https://lovable.dev/signup`
+* **Mapeamento do Fluxo do Lovable:**
+  1. **Banner de Cookies:** O robô detecta e clica automaticamente em `Accept all` (`[data-testid='consent-accept-all-button']`).
+  2. **Etapa 1 (E-mail):** Preenche o campo `input[type='email']` com o e-mail `@sixtysix.online` e clica em `Continue`.
+  3. **Etapa 2 (Senha):** O formulário revela o campo de senha. O robô preenche `input[type='password']` (cumprindo a regra do Lovable: mínimo 8 caracteres e números).
+  4. **Proteção Anti-Bot / Cloudflare Turnstile:** O Lovable utiliza Cloudflare Turnstile (`cf-turnstile-response`). Por isso o **AdsPower é essencial**, fornecendo fingerprints reais e proxies residenciais limpos.
+  5. **Submissão:** Clica em `Create your account` (`button:has-text('Create your account')`).
+  6. **Ativação por E-mail:** O Lovable envia o link de ativação. O `EmailVerifier` captura o link no ar e o Playwright acessa a URL no mesmo perfil do AdsPower para ativar a conta!
+
+---
+
+## 4. Criação e Ativação de Contas com Domínio Próprio (`@sixtysix.online`)
 
 ### 3.1. Arquitetura de Recebimento de E-mails (Catch-All Gratuito)
 Como o domínio `sixtysix.online` está sob a Cloudflare (`gannon.ns.cloudflare.com` / `mona.ns.cloudflare.com`):
