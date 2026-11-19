@@ -504,15 +504,20 @@ async def execute_onboarding(
                 activation_url,
             )
             await page.goto(activation_url, wait_until="domcontentloaded", timeout=timeout)
+            await asyncio.sleep(3.0)
 
-            # Se a página de ativação exigir clique em botão (ex: "Confirmar", "Ativar", "Continuar")
+            # Aguarda e clica em qualquer botão de confirmação ("Continuar", "Ir para Lovable", etc.)
             try:
-                activate_btn = await page.query_selector(
-                    "button:has-text('confirm'), button:has-text('ativar'), button:has-text('verify'), a:has-text('confirm'), button:has-text('continuar')"
-                )
-                if activate_btn and await activate_btn.is_visible():
-                    await activate_btn.click(timeout=3000)
-                    logger.debug("[%s] Botão de confirmação de ativação clicado.", user_data.profile_id)
+                btn_loc = page.locator(
+                    "a:has-text('Continuar'), button:has-text('Continuar'), "
+                    "a:has-text('Continue'), button:has-text('Continue'), "
+                    "a:has-text('Lovable'), button:has-text('Lovable'), "
+                    "button:has-text('confirm'), a:has-text('confirm')"
+                ).first
+                if await btn_loc.is_visible(timeout=5000):
+                    await btn_loc.click()
+                    logger.info("[%s] Botão de redirecionamento pós-ativação clicado!", user_data.profile_id)
+                    await asyncio.sleep(3.0)
             except Exception:
                 pass
 
@@ -545,16 +550,45 @@ async def execute_onboarding(
                     remix_url,
                 )
                 await page.goto(remix_url, wait_until="domcontentloaded", timeout=timeout)
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(3.0)
+
+                # Se foi redirecionado para login, autentica automaticamente
+                if "login" in page.url.lower():
+                    logger.info("[%s] [ÁRVORE REMIX] Redirecionado para login. Autenticando conta recém-ativada...", user_data.profile_id)
+                    try:
+                        await try_dismiss_cookies()
+                        email_input = await page.wait_for_selector(sel.email, timeout=8000)
+                        if email_input:
+                            await email_input.fill(user_data.email)
+                            await page.press(sel.email, "Enter")
+                            await asyncio.sleep(2.0)
+                            pwd_input = await page.wait_for_selector(sel.password, timeout=8000)
+                            if pwd_input:
+                                await pwd_input.fill(user_data.password)
+                                await page.press(sel.password, "Enter")
+                                entrar_btn = await page.query_selector("button:has-text('Entrar'), button:has-text('Log in'), button[type='submit']")
+                                if entrar_btn:
+                                    await entrar_btn.click()
+                                await page.wait_for_url(lambda u: "login" not in u.lower(), timeout=15000)
+                                logger.info("[%s] [ÁRVORE REMIX] Login concluído com sucesso!", user_data.profile_id)
+                    except Exception as login_err:
+                        logger.warning("[%s] [ÁRVORE REMIX] Falha na autenticação pós-redirect: %s", user_data.profile_id, login_err)
+
+                # Garante que está na URL de remix
+                if "remix" not in page.url.lower():
+                    await page.goto(remix_url, wait_until="domcontentloaded", timeout=timeout)
+                    await asyncio.sleep(3.0)
 
                 # Tenta clicar no botão de Remix na página
                 remix_button_selector = (
-                    "button:has-text('Remix project'), button:has-text('Remix'), "
-                    "button:has-text('Use template'), button:has-text('Fork'), "
-                    "[data-testid*='remix'], button[type='submit']"
+                    "button:has-text('Remix project'), button:has-text('Remixar projeto'), "
+                    "button:has-text('Remix'), button:has-text('Remixar'), "
+                    "button:has-text('Use template'), button:has-text('Usar modelo'), "
+                    "button:has-text('Fork'), button:has-text('Duplicar'), "
+                    "button:has-text('Clonar'), [data-testid*='remix'], button[type='submit']"
                 )
                 try:
-                    remix_btn = await page.wait_for_selector(remix_button_selector, timeout=12000, state="visible")
+                    remix_btn = await page.wait_for_selector(remix_button_selector, timeout=15000, state="visible")
                     if remix_btn:
                         await remix_btn.click()
                         logger.info("[%s] [ÁRVORE REMIX] Botão de Remix clicado com sucesso!", user_data.profile_id)
