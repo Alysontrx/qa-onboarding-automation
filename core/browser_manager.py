@@ -7,6 +7,7 @@ unitários/CI, garantindo liberação completa de recursos e encerramento limpo.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Optional, Set

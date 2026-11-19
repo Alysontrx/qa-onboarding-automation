@@ -30,8 +30,8 @@ class SelectorsConfig:
     password: str = "[data-testid='input-password'], input[type='password'], input[name='password']"
     name: str = "[data-testid='input-name'], input[name='name']"
     submit: str = "[data-testid='auth-submit-button'], [data-testid='btn-submit'], button:has-text('Continuar'), button:has-text('Criar conta'), button:has-text('Crie sua conta'), button:has-text('Create your account'), button:has-text('Sign up'), button:has-text('Continue'), button[type='submit']"
-    success_message: str = "[data-testid='success-message'], .success-msg, .alert-success, div:has-text('Check your email'), h1:has-text('Check your email'), div:has-text('sent you a link'), div:has-text('Verifique seu e-mail'), h1:has-text('Verifique seu e-mail'), div:has-text('link de confirmação'), h1:has-text('Welcome')"
-    error_message: str = "[data-testid='error-message'], .error-msg, .alert-danger, [role='alert'], div:has-text('already in use'), div:has-text('Unable to verify')"
+    success_message: str = "[data-testid='success-message'], .success-msg, .alert-success, div:has-text('Check your email'), h1:has-text('Check your email'), h2:has-text('Check your email'), p:has-text('Check your email'), div:has-text('sent you a link'), div:has-text('Verifique seu e-mail'), h1:has-text('Verifique seu e-mail'), h2:has-text('Verifique seu e-mail'), p:has-text('Verifique seu e-mail'), div:has-text('link de confirmação'), h1:has-text('Welcome')"
+    error_message: str = "[data-testid='error-message'], .error-msg, .alert-danger, [role='alert'], div:has-text('already in use'), div:has-text('Unable to verify'), div:has-text('Registration denied'), div:has-text('suspicious activity'), div:has-text('já está em uso'), div:has-text('obrigatória')"
     activation_success: str = "[data-testid='activation-success'], .verified, h1:has-text('sucesso'), h1:has-text('confirmad'), div:has-text('confirmad'), div:has-text('ativad'), div:has-text('Welcome'), div:has-text('Dashboard')"
 
 
