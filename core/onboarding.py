@@ -686,21 +686,43 @@ async def execute_onboarding(
                     await page.goto(remix_url, wait_until="domcontentloaded", timeout=timeout)
                     await asyncio.sleep(3.0)
 
-                # Tenta clicar no botão de Remix na página
+                # Loop de tentativa de clique no botão de Remix (suportando a modal "Couldn't remix this project")
                 remix_button_selector = (
                     "button:has-text('Remix project'), button:has-text('Remixar projeto'), "
+                    "button:has-text('Remix again'), button:has-text('Remixar novamente'), "
                     "button:has-text('Remix'), button:has-text('Remixar'), "
                     "button:has-text('Use template'), button:has-text('Usar modelo'), "
                     "button:has-text('Fork'), button:has-text('Duplicar'), "
                     "button:has-text('Clonar'), [data-testid*='remix'], button[type='submit']"
                 )
-                try:
-                    remix_btn = await page.wait_for_selector(remix_button_selector, timeout=15000, state="visible")
-                    if remix_btn:
-                        await remix_btn.click()
-                        logger.info("[%s] [ÁRVORE REMIX] Botão de Remix clicado com sucesso!", user_data.profile_id)
-                except Exception as exc:
-                    logger.warning("[%s] [ÁRVORE REMIX] Botão de remix não encontrado diretamente: %s", user_data.profile_id, exc)
+
+                for attempt in range(1, 4):
+                    # 1. Verifica se apareceu a modal "Couldn't remix this project"
+                    modal_text = await page.evaluate("() => (document.body.innerText || '').toLowerCase()")
+                    if "couldn't remix" in modal_text or "não foi possível remixar" in modal_text or "wasn't created" in modal_text:
+                        logger.warning("[%s] [ÁRVORE REMIX] Modal 'Couldn't remix' detectada. Tentando 'Remix again'...", user_data.profile_id)
+                        remix_again_btn = await page.query_selector("button:has-text('Remix again'), button:has-text('Tentar novamente')")
+                        if remix_again_btn and await remix_again_btn.is_visible():
+                            await remix_again_btn.click()
+                            logger.info("[%s] [ÁRVORE REMIX] Botão 'Remix again' clicado com sucesso!", user_data.profile_id)
+                            await asyncio.sleep(4.0)
+                        else:
+                            open_orig = await page.query_selector("button:has-text('Open original project'), button:has-text('Abrir projeto original')")
+                            if open_orig and await open_orig.is_visible():
+                                await open_orig.click()
+                                await asyncio.sleep(4.0)
+
+                    # 2. Tenta localizar e clicar no botão de remix
+                    try:
+                        remix_btn = await page.wait_for_selector(remix_button_selector, timeout=8000, state="visible")
+                        if remix_btn:
+                            await remix_btn.click()
+                            logger.info("[%s] [ÁRVORE REMIX] Botão de Remix clicado com sucesso!", user_data.profile_id)
+                            break
+                    except Exception:
+                        pass
+
+                    await asyncio.sleep(2.0)
 
                 # Aguarda redirecionamento para o novo projeto (/projects/<novo_id>)
                 logger.info("[%s] [ÁRVORE REMIX] Aguardando criação do projeto clonado...", user_data.profile_id)
