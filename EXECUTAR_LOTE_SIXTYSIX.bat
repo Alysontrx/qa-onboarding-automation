@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title OPERACAO SIXTYSIX 100%% AUTOMATIZADA
 echo ==================================================================
 echo   OPERACAO SIXTYSIX - CRIACAO + REMIX + AUTO-REGISTRO NO CLAUDE
-echo   Dominio: @emporioburguers.shop - Matriz: 448b5334-3b25-4ed6-9e4d-b6ce9035dd07
+echo   Dominios: @emporioburguers.shop - @destravacreditoquiz.com.br - Matriz: 448b5334-3b25-4ed6-9e4d-b6ce9035dd07
 echo ==================================================================
 echo.
 echo Iniciando automacao oficial com auto-registro...
