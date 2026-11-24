@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SixtySix • Reseller & Infrastructure Hub</title>
+  <meta name="theme-color" content="#123435">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fustat:wght@400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&family=DM+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #1f4647;
+      --muted: #4e6b68;
+      --green: #22c55e;
+      --green-dark: #123435;
+      --green-deep: #0b2223;
+      --primary: #9eea6c;
+      --primary-hover: #b4f58c;
+      --primary-foreground: #0b3824;
+      --mint: #e4f9ee;
+      --paper: #fbf9f4;
+      --cream: #f3efe6;
+      --card-bg: rgba(255, 255, 255, 0.96);
+      --line: rgba(31, 70, 71, 0.12);
+      --line-focus: rgba(31, 70, 71, 0.3);
+      --font-brand: 'Fustat', sans-serif;
+      --font-body: 'Manrope', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 50% -10%, rgba(158, 234, 108, 0.35) 0%, transparent 55%),
+        radial-gradient(circle at 95% 30%, rgba(228, 249, 238, 0.6) 0%, transparent 45%),
+        radial-gradient(circle at 5% 85%, rgba(243, 239, 230, 0.8) 0%, transparent 50%);
+    }
+
+    .shell {
+      width: min(1200px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 24px 0 60px;
+    }
+
+    /* Top Capsule Navbar AbacatePay/SixtySix Style */
+    .top-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--card-bg);
+      backdrop-filter: blur(24px);
+      border: 1px solid var(--line);
+      border-radius: 9999px;
+      box-shadow: 0 10px 30px rgba(31, 70, 71, 0.05);
+      margin-bottom: 32px;
+      position: sticky;
+      top: 16px;
+      z-index: 100;
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .brand-logo {
+      height: 32px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .brand-title {
+      font-family: var(--font-brand);
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--ink);
+      letter-spacing: -0.04em;
+    }
+
+    .reseller-pill {
+      font-family: var(--font-brand);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #15803d;
+      background: #dcfce7;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      margin-left: 4px;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .node-status-badge {
+      font-family: var(--font-brand);
+      font-size: 12px;
+      font-weight: 700;
+      color: #15803d;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #22c55e;
+      animation: pulse 1.6s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(0.95); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.5; }
+    }
+
+    /* Hero Section */
+    .hero {
+      margin-bottom: 32px;
+    }
+
+    .hero-eyebrow {
+      font-family: var(--font-brand);
+      font-size: 14px;
+      font-weight: 800;
+      color: #15803d;
+      background: rgba(34, 197, 94, 0.12);
+      padding: 4px 14px;
+      border-radius: 9999px;
+      display: inline-block;
+      margin-bottom: 8px;
+    }
+
+    .hero-title {
+      font-family: var(--font-brand);
+      font-size: 42px;
+      font-weight: 900;
+      color: var(--ink);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+
+    .hero-subtitle {
+      font-size: 16px;
+      color: var(--muted);
+      max-width: 650px;
+      line-height: 1.5;
+    }
+
+    /* Metric Banners */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 900px) {
+      .metrics-row { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 500px) {
+      .metrics-row { grid-template-columns: 1fr; }
+    }
+
+    .stat-box {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 22px 24px;
+      box-shadow: 0 4px 20px rgba(31, 70, 71, 0.04);
+      transition: all 0.25s ease;
+      position: relative;
+    }
+
+    .stat-box:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 30px rgba(31, 70, 71, 0.08);
+      border-color: var(--line-focus);
+    }
+
+    .stat-label {
+      font-family: var(--font-brand);
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-number {
+      font-family: var(--font-brand);
+      font-size: 36px;
+      font-weight: 900;
+      color: var(--ink);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+
+    .stat-foot {
+      font-size: 13px;
+      font-weight: 600;
+      color: #15803d;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Main Content Layout */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 960px) {
+      .content-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Infrastructure Card */
+    .panel-card {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: 0 6px 25px rgba(31, 70, 71, 0.05);
+      margin-bottom: 24px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-title {
+      font-family: var(--font-brand);
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--ink);
+      letter-spacing: -0.03em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Endpoint API Box */
+    .gateway-callout {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .gateway-url-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      color: var(--ink);
+      font-weight: 600;
+      word-break: break-all;
+    }
+
+    .btn-copy {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-family: var(--font-brand);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-copy:hover {
+      background: var(--paper);
+      border-color: var(--green);
+    }
+
+    /* Pool Bridges Table */
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+
+    th {
+      text-align: left;
+      font-family: var(--font-brand);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      padding: 12px 14px;
+      border-bottom: 2px solid var(--line);
+    }
+
+    td {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(228, 249, 238, 0.25);
+    }
+
+    .badge-ok {
+      font-family: var(--font-brand);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #15803d;
+      background: #dcfce7;
+      padding: 3px 10px;
+      border-radius: 9999px;
+    }
+
+    /* Reseller Management Sidebar */
+    .client-key-box {
+      background: linear-gradient(145deg, #123435 0%, #0d2728 100%);
+      color: #ffffff;
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: 0 12px 35px rgba(18, 52, 53, 0.2);
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .client-key-box::after {
+      content: "";
+      position: absolute;
+      top: -50px; right: -50px;
+      width: 150px; height: 150px;
+      background: radial-gradient(circle, rgba(158, 234, 108, 0.2) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .reseller-title {
+      font-family: var(--font-brand);
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 6px;
+    }
+
+    .reseller-desc {
+      font-size: 13.5px;
+      color: #cbd5e1;
+      line-height: 1.45;
+      margin-bottom: 20px;
+    }
+
+    .plan-selector {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .plan-name {
+      font-family: var(--font-brand);
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--primary);
+    }
+
+    .plan-price {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .btn-create-key {
+      width: 100%;
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border: none;
+      padding: 16px;
+      border-radius: 16px;
+      font-family: var(--font-brand);
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 6px 20px rgba(158, 234, 108, 0.4);
+    }
+
+    .btn-create-key:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(158, 234, 108, 0.55);
+    }
+
+    /* Live Feed Box */
+    .live-feed-card {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 24px;
+      box-shadow: 0 6px 25px rgba(31, 70, 71, 0.04);
+    }
+
+    .feed-header {
+      font-family: var(--font-brand);
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--ink);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .feed-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .feed-item {
+      padding: 12px 14px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      font-size: 12.5px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .feed-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .feed-time {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .feed-hash {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: #059669;
+      word-break: break-all;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 50px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    
+    <!-- Top Capsule Navbar -->
+    <header class="top-nav">
+      <div class="brand-wrap">
+        <img src="/assets/sixtysix-crowned-logo.png" alt="SixtySix" class="brand-logo" onerror="this.style.display='none'">
+        <span class="brand-title">sixtysix</span>
+        <span class="reseller-pill">Reseller API</span>
+      </div>
+      <div class="nav-actions">
+        <div class="node-status-badge">
+          <div class="pulse-dot"></div>
+          <span id="node-name">Cluster 4G Claro • 100% Online</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero Title -->
+    <section class="hero">
+      <div class="hero-eyebrow">Infraestrutura Corporativa & Revenda</div>
+      <h1 class="hero-title">Painel de Revenda de Tokens IA</h1>
+      <p class="hero-subtitle">Distribuição corporativa com failover circular, pool residencial de alta velocidade e gerenciamento de chaves para clientes terceiros.</p>
+    </section>
+
+    <!-- Key Metrics Cards -->
+    <section class="metrics-row">
+      <div class="stat-box">
+        <div class="stat-label">⚡ Tokens em Estoque</div>
+        <div class="stat-number" id="tokens-val">98M</div>
+        <div class="stat-foot">● +1.000.000 / conta gerada</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-label">🛡️ Pontes Residenciais</div>
+        <div class="stat-number" id="contas-val">98</div>
+        <div class="stat-foot">100% Ativas no Carrossel</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-label">📡 IP Móvel 4G Atual</div>
+        <div class="stat-number" id="ip-val" style="font-size: 23px; padding-top: 4px;">191.38.227.135</div>
+        <div class="stat-foot">● Claro S.A. Rotativo</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-label">💰 Potencial Revenda</div>
+        <div class="stat-number" style="color: #15803d;">R$ 4.900</div>
+        <div class="stat-foot">Base: R$ 50 / 1M Tokens</div>
+      </div>
+    </section>
+
+    <!-- Main Workspace -->
+    <div class="content-grid">
+      
+      <!-- Coluna Principal: Infraestrutura do Pool -->
+      <div>
+        <div class="panel-card">
+          <div class="panel-header">
+            <h2 class="panel-title">
+              <span>🔌 Endpoint do Gateway OpenAI / Claude</span>
+            </h2>
+            <span class="badge-ok">Rotação Automática</span>
+          </div>
+
+          <p style="font-size: 14px; color: var(--muted); margin-bottom: 14px; line-height: 1.45;">
+            Forneça este endpoint compatível com o SDK oficial da OpenAI e Anthropic para os seus clientes e ferramentas (Cursor, Claude Code, Cline, LibreChat).
+          </p>
+
+          <div class="gateway-callout">
+            <div class="gateway-url-box">
+              <span>POST</span>
+              <code>https://api.sixtysix.online/v1/chat/completions</code>
+            </div>
+            <button class="btn-copy" onclick="copyText('https://api.sixtysix.online/v1')">
+              <span>Copiar URL</span>
+            </button>
+          </div>
+
+          <div class="panel-header" style="margin-top: 26px;">
+            <h3 class="panel-title" style="font-size: 17px;">
+              <span>🌐 Pontes e Contas Ativas no Pool</span>
+            </h3>
+            <span style="font-size: 12px; font-weight: 700; color: var(--muted);" id="table-count">98 nós conectados</span>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Conta / E-mail</th>
+                  <th>Subdomínio da Ponte</th>
+                  <th>Status</th>
+                  <th>Latência</th>
+                </tr>
+              </thead>
+              <tbody id="bridges-tbody">
+                <tr>
+                  <td><strong>thiago.oliveira48@destravacreditoquiz.com.br</strong></td>
+                  <td><code>id-preview--7af87b81-a864.lovable.app</code></td>
+                  <td><span class="badge-ok">● Online 200</span></td>
+                  <td><strong>57 ms</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>rafael.santos47@destravacreditoquiz.com.br</strong></td>
+                  <td><code>id-preview--716e83ab-8783.lovable.app</code></td>
+                  <td><span class="badge-ok">● Online 200</span></td>
+                  <td><strong>59 ms</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>rodrigo.lima46@destravacreditoquiz.com.br</strong></td>
+                  <td><code>id-preview--023582e2-a51c.lovable.app</code></td>
+                  <td><span class="badge-ok">● Online 200</span></td>
+                  <td><strong>58 ms</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>matheus.souza45@destravacreditoquiz.com.br</strong></td>
+                  <td><code>id-preview--b4e0657e-a5a0.lovable.app</code></td>
+                  <td><span class="badge-ok">● Online 200</span></td>
+                  <td><strong>61 ms</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>felipe.costa42@destravacreditoquiz.com.br</strong></td>
+                  <td><code>id-preview--a354a06e-561a.lovable.app</code></td>
+                  <td><span class="badge-ok">● Online 200</span></td>
+                  <td><strong>64 ms</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coluna Lateral: Gestão de Revenda & Chaves -->
+      <div>
+        
+        <!-- Caixa de Geração de Chave para Revendedor -->
+        <div class="client-key-box">
+          <h3 class="reseller-title">Criar Chave de Cliente</h3>
+          <p class="reseller-desc">Gere uma chave de acesso com cobrança mensal e limite de consumo dedicado para o seu cliente.</p>
+
+          <div class="plan-selector">
+            <div>
+              <div class="plan-name">Plano Developer Pro</div>
+              <div style="font-size: 11.5px; color: #94a3b8;">50M Tokens / Mês</div>
+            </div>
+            <div class="plan-price">R$ 149/mês</div>
+          </div>
+
+          <div class="plan-selector">
+            <div>
+              <div class="plan-name">Plano Enterprise Ilimitado</div>
+              <div style="font-size: 11.5px; color: #94a3b8;">Acesso Completo Claude Opus</div>
+            </div>
+            <div class="plan-price">R$ 390/mês</div>
+          </div>
+
+          <button class="btn-create-key" onclick="generateApiKey()">
+            <span>⚡ Gerar Nova Chave API</span>
+          </button>
+        </div>
+
+        <!-- Feed de Criação ao Vivo -->
+        <div class="live-feed-card">
+          <div class="feed-header">
+            <span>📡 Telemetria em Tempo Real</span>
+            <span style="font-size: 11px; font-weight: 700; color: #15803d; font-family: var(--font-mono);">SYNC 24/7</span>
+          </div>
+          <div class="feed-list" id="feed-list">
+            <div class="feed-item">
+              <div class="feed-top">
+                <span>Injeção Concluída (+1M)</span>
+                <span class="feed-time">00:20:18</span>
+              </div>
+              <div class="feed-hash">thiago.oliveira48@destravacreditoquiz.com.br</div>
+            </div>
+            <div class="feed-item">
+              <div class="feed-top">
+                <span>Injeção Concluída (+1M)</span>
+                <span class="feed-time">00:19:18</span>
+              </div>
+              <div class="feed-hash">rafael.santos47@destravacreditoquiz.com.br</div>
+            </div>
+            <div class="feed-item">
+              <div class="feed-top">
+                <span>Injeção Concluída (+1M)</span>
+                <span class="feed-time">00:18:17</span>
+              </div>
+              <div class="feed-hash">rodrigo.lima46@destravacreditoquiz.com.br</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <footer class="footer">
+      © 2026 SixtySix Infrastructure • Painel de Gestão de Revenda & API Corporativa
+    </footer>
+
+  </div>
+
+  <script>
+    function copyText(text) {
+      navigator.clipboard.writeText(text);
+      alert('URL copiada para a área de transferência: ' + text);
+    }
+
+    function generateApiKey() {
+      const key = 'sk-sx-' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+      prompt('Chave API de Revenda Gerada com Sucesso para seu Cliente:', key);
+    }
+
+    async function syncData() {
+      try {
+        const res = await fetch('http://184.107.166.91:8081', { signal: AbortSignal.timeout(3000) });
+        if (!res.ok) return;
+        const d = await res.json();
+        if (d.tokens_total) document.getElementById('tokens-val').textContent = d.tokens_total;
+        if (d.contas_hoje) {
+          document.getElementById('contas-val').textContent = d.contas_hoje;
+          document.getElementById('table-count').textContent = d.contas_hoje + ' nós conectados';
+        }
+        if (d.ip) document.getElementById('ip-val').textContent = d.ip;
+      } catch (e) {}
+    }
+
+    setInterval(syncData, 3000);
+    syncData();
+  </script>
+</body>
+</html>

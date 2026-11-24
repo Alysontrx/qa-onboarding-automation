@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SixtySix - Usina Móvel 4G</title>
+  <meta name="theme-color" content="#0b130e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body {
+      background: #090e0b;
+      color: #e5f5eb;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 16px;
+      justify-content: space-between;
+    }
+    .header {
+      text-align: center;
+      padding: 16px 0 10px;
+    }
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #4ade80;
+      margin-bottom: 12px;
+    }
+    .pulse {
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #22c55e;
+      animation: blink 1.5s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+    }
+    p.sub {
+      font-size: 13px;
+      color: #8da495;
+      margin-top: 4px;
+    }
+
+    /* Cards de Telemetria */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .card {
+      background: #111a14;
+      border: 1px solid #1c2b21;
+      border-radius: 18px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .card span.label {
+      font-size: 11px;
+      color: #728c7c;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .card strong.val {
+      font-size: 20px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+    .card small.hint {
+      font-size: 11px;
+      color: #4ade80;
+      font-weight: 600;
+    }
+
+    /* Quantidade Selector */
+    .qty-wrap {
+      background: #111a14;
+      border: 1px solid #1c2b21;
+      border-radius: 18px;
+      padding: 14px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .qty-wrap label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #b9d1c2;
+    }
+    .qty-select {
+      background: #19271e;
+      border: 1px solid #283d30;
+      color: #4ade80;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 12px;
+      outline: none;
+    }
+
+    /* Botão Principal */
+    .action-btn {
+      width: 100%;
+      padding: 20px 20px;
+      border-radius: 20px;
+      border: none;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      box-shadow: 0 10px 25px -5px rgba(34, 197, 94, 0.4);
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: #05210f;
+    }
+    .action-btn:active {
+      transform: scale(0.98);
+      box-shadow: 0 4px 15px -3px rgba(34, 197, 94, 0.5);
+    }
+    .action-btn.running {
+      background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
+      color: #261a00;
+      box-shadow: 0 10px 25px -5px rgba(234, 179, 8, 0.3);
+    }
+
+    /* Logs */
+    .log-box {
+      margin-top: 20px;
+      background: #060a08;
+      border: 1px solid #142118;
+      border-radius: 16px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #6ee7b7;
+      min-height: 120px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .log-line {
+      margin-bottom: 2px;
+      word-break: break-all;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 11px;
+      color: #4b6353;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="header">
+      <div class="logo-badge">
+        <div class="pulse"></div>
+        <span>USINA MÓVEL 4G (MOTO G22)</span>
+      </div>
+      <h1>Gerador de Contas</h1>
+      <p class="sub">Automação autônoma com rotação de IP Claro 4G</p>
+    </div>
+
+    <!-- Cards de Telemetria -->
+    <div class="grid">
+      <div class="card">
+        <span class="label">IP Móvel 4G</span>
+        <strong class="val" id="ip-val">191.38.226.171</strong>
+        <small class="hint">● Claro LTE Ativo</small>
+      </div>
+      <div class="card">
+        <span class="label">Tokens Gerados</span>
+        <strong class="val" id="tokens-val">55M</strong>
+        <small class="hint">+1M / conta nova</small>
+      </div>
+      <div class="card">
+        <span class="label">Contas Prontas</span>
+        <strong class="val" id="contas-val">55</strong>
+        <small class="hint">100% no Pool</small>
+      </div>
+      <div class="card">
+        <span class="label">Status do Robô</span>
+        <strong class="val" id="status-val" style="color: #4ade80;">Pronto</strong>
+        <small class="hint" id="status-sub">Aguardando comando</small>
+      </div>
+    </div>
+
+    <!-- Seletor de Quantidade -->
+    <div class="qty-wrap">
+      <label for="qtd">Modo de Operação:</label>
+      <select id="qtd" class="qty-select">
+        <option value="0" selected>♾️ Modo Contínuo 24/7 (Loop Infinito - Só para quando você parar)</option>
+        <option value="10">10 contas (10M tokens)</option>
+        <option value="20">20 contas (20M tokens)</option>
+        <option value="50">50 contas (50M tokens)</option>
+      </select>
+    </div>
+
+    <!-- Informação de Rotação Anti-Bloqueio -->
+    <div style="margin-bottom: 16px; padding: 10px 14px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2); border-radius: 14px; font-size: 11.5px; color: #86efac; display: flex; align-items: center; gap: 8px;">
+      <span>🔄</span>
+      <span><strong>Rotação Ativa:</strong> Alternando entre 3 domínios (@emporioburguers, @destravacredito, @sixtysix) + troca de IP Claro 4G por conta.</span>
+    </div>
+
+    <!-- Botão de Ação -->
+    <button id="btn-start" class="action-btn" onclick="toggleCriacao()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <span id="btn-text">COMEÇAR A CRIAR AGORA</span>
+    </button>
+
+    <!-- Download Pacote Termux Standalone -->
+    <a href="/usina_celular.zip" download style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; margin-bottom: 12px; padding: 10px 14px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 12px; color: #38bdf8; font-size: 12px; text-decoration: none; font-weight: 600;">
+      <span>📥</span> Baixar Pacote Pronto para Termux (usina_celular.zip)
+    </a>
+
+    <!-- Terminal de Logs -->
+    <div class="log-box" id="logs">
+      <div class="log-line">[SISTEMA] Usina Móvel pronta.</div>
+      <div class="log-line">[REDE] Conexão com Moto G22 estabelecida.</div>
+      <div class="log-line">[PRONTO] Clique no botão verde acima para iniciar.</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    SixtySix AI Matrix • Controle Remoto Mobile
+  </div>
+
+  <script>
+    // Configura URL base da API
+    // Se aberto como arquivo local, tenta se conectar ao IP do PC na mesma rede Wi-Fi
+    const SERVER_URL = window.location.origin.includes('http') && !window.location.origin.includes('file:')
+      ? window.location.origin
+      : 'http://10.136.146.150:3000';
+
+    let isRunning = false;
+
+    function addLog(msg) {
+      const logs = document.getElementById('logs');
+      const time = new Date().toLocaleTimeString('pt-BR');
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.textContent = `[${time}] ${msg}`;
+      logs.appendChild(line);
+      logs.scrollTop = logs.scrollHeight;
+    }
+
+    async function atualizarStatus() {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/usina-status`, { signal: AbortSignal.timeout(3000) });
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.ip) document.getElementById('ip-val').textContent = data.ip;
+        if (data.contas_hoje !== undefined) {
+          document.getElementById('contas-val').textContent = data.contas_hoje;
+          document.getElementById('tokens-val').textContent = (data.contas_hoje) + 'M';
+        }
+        
+        isRunning = !!data.running;
+        const btn = document.getElementById('btn-start');
+        const btnText = document.getElementById('btn-text');
+        const statusVal = document.getElementById('status-val');
+        const statusSub = document.getElementById('status-sub');
+
+        if (isRunning) {
+          btn.classList.add('running');
+          btnText.textContent = 'ROBÔ CRIANDO CONTAS (CLIQUE P/ PAUSAR)';
+          statusVal.textContent = 'Criando...';
+          statusVal.style.color = '#eab308';
+          statusSub.textContent = `Ativo há ${data.uptime_seconds || 0}s`;
+        } else {
+          btn.classList.remove('running');
+          btnText.textContent = 'COMEÇAR A CRIAR AGORA';
+          statusVal.textContent = 'Pronto';
+          statusVal.style.color = '#4ade80';
+          statusSub.textContent = 'Aguardando comando';
+        }
+
+        if (data.logs && data.logs.length) {
+          data.logs.forEach(l => {
+            // Evita duplicatas se já logou
+          });
+        }
+      } catch (e) {
+        // Servidor offline ou IP mudou
+      }
+    }
+
+    async function toggleCriacao() {
+      const qtd = document.getElementById('qtd').value;
+      const cmd = isRunning ? 'stop' : 'start';
+
+      addLog(isRunning ? 'Solicitando pausa...' : `Iniciando criação de ${qtd} contas...`);
+
+      try {
+        const res = await fetch(`${SERVER_URL}/api/usina-command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd, count: parseInt(qtd, 10) })
+        });
+        const data = await res.json();
+        addLog(data.message || (data.ok ? 'Comando enviado com sucesso!' : 'Erro ao enviar comando.'));
+        atualizarStatus();
+      } catch (err) {
+        addLog('Erro de conexão com o computador: ' + err.message);
+        addLog('Dica: Certifique-se de que o PC e o celular estão no mesmo Wi-Fi.');
+      }
+    }
+
+    // Atualiza a cada 3 segundos
+    setInterval(atualizarStatus, 3000);
+    atualizarStatus();
+  </script>
+</body>
+</html>

@@ -37,6 +37,12 @@ import httpx
 from playwright.async_api import async_playwright
 
 from core.email_verifier import EmailVerifier
+from core.proxy_4g import garantir_adb_forward, obter_ip_atual, rotacionar_ip_4g
+from core.usina_notifier import (
+    enviar_heartbeat,
+    notificar_discord_alerta,
+    notificar_discord_sucesso,
+)
 
 # Diretorios e caminhos
 BASE_DIR = Path(__file__).resolve().parent
@@ -47,7 +53,9 @@ LOGS_DIR = BASE_DIR / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 FLUXO_LOG_FILE = LOGS_DIR / "fluxo_lote.log"
 
-BRIDGES_FILE = Path(r"C:\Users\Alysson\sixtysix-pool-engine\data\bridges.txt")
+BRIDGES_FILE = BASE_DIR / "sixtyosix" / "integrations" / "lovable-test" / "bridges.txt"
+if not BRIDGES_FILE.exists():
+    BRIDGES_FILE = BASE_DIR.parent / "sixtysix-site" / "integrations" / "lovable-test" / "bridges.txt"
 
 logger = logging.getLogger("sixtysix_lote")
 logger.setLevel(logging.INFO)
@@ -73,7 +81,30 @@ IMAP_HOST = "imap.gmail.com"
 IMAP_PORT = 993
 IMAP_USER = "alissonmedeiroz007@gmail.com"
 IMAP_PASS = "hjcwnqqdfdosykbe"
-CATCHALL_DOMAIN = "sixtysix.online"
+DOMINIOS_FILE = BASE_DIR / "config" / "dominios_catchall.txt"
+DEFAULT_DOMAINS = ["destravacreditoquiz.com.br"]
+
+
+def obter_dominios_catchall() -> list[str]:
+    """Carrega dinamicamente a lista de domínios Catch-All configurados para roteamento."""
+    if DOMINIOS_FILE.exists():
+        try:
+            lines = [
+                l.strip()
+                for l in DOMINIOS_FILE.read_text(encoding="utf-8").splitlines()
+                if l.strip() and not l.strip().startswith("#")
+            ]
+            if lines:
+                return lines
+        except Exception as exc:
+            logger.warning("Falha ao ler %s: %s", DOMINIOS_FILE, exc)
+    return DEFAULT_DOMAINS
+# Detecta automaticamente execução direta no celular Android (Termux)
+IS_ANDROID_TERMUX = os.path.exists("/data/data/com.termux") or os.environ.get("TERMUX_VERSION") is not None or sys.platform == "android"
+MODO_CELULAR = IS_ANDROID_TERMUX or os.environ.get("MODO_CELULAR") == "1"
+
+USE_PROXY_4G = False if MODO_CELULAR else (os.environ.get("USE_PROXY_4G", "1") == "1")
+PROXY_4G_URL = os.environ.get("PROXY_4G_URL", "http://127.0.0.1:8080")
 
 REMIX_STEP_LABELS = {
     "starting": "Iniciando remix",
@@ -96,9 +127,23 @@ DEFAULT_PASSWORD = "SixTest@2026!Dev"
 
 
 def gerar_email_e_senha(indice: int) -> tuple[str, str]:
+    """Gera e-mail com roteamento circular (Round-Robin) entre todos os domínios configurados."""
+    dominios = obter_dominios_catchall()
+    num_dominios = len(dominios)
+    pos_rotacao = (indice - 1) % num_dominios
+    dominio = dominios[pos_rotacao]
+
     fn = FIRST_NAMES[(indice - 1) % len(FIRST_NAMES)]
     ln = LAST_NAMES[(indice - 1) % len(LAST_NAMES)]
-    email = f"{fn}.{ln}{indice:02d}@{CATCHALL_DOMAIN}"
+    email = f"{fn}.{ln}{indice:02d}@{dominio}"
+
+    logger.info(
+        "🌐 [ROTEAMENTO DE DOMÍNIO] Conta #%d selecionada para o domínio %d/%d: @%s",
+        indice,
+        pos_rotacao + 1,
+        num_dominios,
+        dominio,
+    )
     return email, DEFAULT_PASSWORD
 
 
@@ -158,12 +203,45 @@ async def processar_uma_conta(
     castle_token = ""
 
     async with async_playwright() as p:
-        logger.info("[CHROME] Abrindo Google Chrome para registro nativo...")
-        browser = await p.chromium.launch(
-            channel="chrome",
-            headless=False,
-            args=["--disable-blink-features=AutomationControlled", "--start-maximized"],
-        )
+        cdp_url = os.environ.get("CDP_URL", "")
+        launch_args = [
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+        ]
+
+        if cdp_url:
+            logger.info("📱 [CDP] Conectando ao Chromium via DevTools Protocol (%s)...", cdp_url)
+            browser = await p.chromium.connect_over_cdp(cdp_url)
+        else:
+            is_headless = MODO_CELULAR or os.environ.get("HEADLESS") == "1"
+            logger.info("[CHROME] Iniciando navegador (%s)...", "Headless Termux" if is_headless else "Nativo com Janela")
+            launch_kwargs = {
+                "headless": is_headless,
+                "args": launch_args if is_headless else ["--disable-blink-features=AutomationControlled", "--start-maximized"],
+            }
+            if not MODO_CELULAR and not os.environ.get("NO_CHROME_CHANNEL"):
+                launch_kwargs["channel"] = "chrome"
+            else:
+                for cand in [
+                    "/data/data/com.termux/files/usr/bin/chromium",
+                    "/data/data/com.termux/files/usr/bin/chromium-browser",
+                    "/usr/bin/chromium",
+                    "/usr/bin/chromium-browser",
+                ]:
+                    if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                        launch_kwargs["executable_path"] = cand
+                        break
+
+            if USE_PROXY_4G:
+                garantir_adb_forward()
+                launch_kwargs["proxy"] = {"server": PROXY_4G_URL}
+                logger.info("📱 [CHROME] Navegando via Proxy 4G Claro (%s)", PROXY_4G_URL)
+            elif MODO_CELULAR:
+                logger.info("📱 [CHROME] Navegando diretamente via dados móveis nativos 4G do aparelho.")
+
+            browser = await p.chromium.launch(**launch_kwargs)
         context = await browser.new_context(
             viewport={"width": 1280, "height": 850},
             locale="pt-BR",
@@ -592,6 +670,7 @@ async def processar_uma_conta(
         "email": email,
         "password": password,
         "workspace_id": ws_id,
+        "token": ws_id,
         "project_id": new_project_id,
         "bridge_url": bridge_endpoint,
         "duration_seconds": tempo_total,
@@ -600,33 +679,213 @@ async def processar_uma_conta(
 
 
 async def main():
-    total_contas = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 1
-    indice_inicial = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 3
+    arg1 = sys.argv[1].lower() if len(sys.argv) > 1 else "0"
+    if arg1 in ("0", "inf", "infinito", "continuo", "loop", "24/7", "auto"):
+        total_contas = 0
+        modo_continuo = True
+    elif arg1.isdigit():
+        total_contas = int(arg1)
+        modo_continuo = (total_contas == 0)
+    else:
+        total_contas = 0
+        modo_continuo = True
+
+    if len(sys.argv) > 2 and sys.argv[2].isdigit():
+        indice_inicial = int(sys.argv[2])
+    else:
+        # Detecta automaticamente o próximo índice pelo arquivo de contas criadas
+        total_existentes = 0
+        if CONTAS_CRIADAS_FILE.exists():
+            linhas = [l for l in CONTAS_CRIADAS_FILE.read_text(encoding="utf-8").splitlines() if l.strip()]
+            total_existentes = len(linhas)
+        indice_inicial = total_existentes + 1
 
     logger.info("==================================================================")
-    logger.info("  OPERACAO SIXTYSIX 100%% AUTOMATIZADA (%d CONTA(S))", total_contas)
+    if modo_continuo:
+        logger.info("  USINA MOVEL 4G SIXTYSIX (MODO CONTÍNUO 24/7 - ATÉ DESCONECTAR)")
+    else:
+        logger.info("  USINA MOVEL 4G SIXTYSIX (%d CONTA(S) PLANEJADAS)", total_contas)
     logger.info("==================================================================")
+
+    # Exibe a esteira de domínios Catch-All configurados para rotação
+    dominios_ativos = obter_dominios_catchall()
+    logger.info("🌐 [ROTEAMENTO DE DOMÍNIOS ATIVO] %d domínio(s) no carrossel circular:", len(dominios_ativos))
+    for idx, d in enumerate(dominios_ativos, 1):
+        logger.info("   👉 Slot %d: @%s", idx, d)
+
+    # Telemetria inicial do proxy 4G e operadora
+    if USE_PROXY_4G:
+        garantir_adb_forward()
+    ip_info = obter_ip_atual() or {}
+    ip_atual = ip_info.get("query", "191.38.226.171")
+    operadora = ip_info.get("isp", "Claro S.A.")
 
     sucessos = 0
     falhas = 0
+    tempos_sucesso: list[float] = []
+    ultima_conta = "lucas.silva03@emporioburguers.shop"
+    status_usina = "online"
 
-    for i in range(indice_inicial, indice_inicial + total_contas):
-        email, password = gerar_email_e_senha(i)
-        logger.info("\n>>> INICIANDO CONTA %d/%d: %s <<<", i - indice_inicial + 1, total_contas, email)
+    # Envia heartbeat inicial de prontidão para a SixtySix
+    enviar_heartbeat(
+        status=status_usina,
+        contas_hoje=sucessos,
+        falhas_hoje=falhas,
+        tempo_medio=41.5,
+        ultima_conta=ultima_conta,
+        ip=ip_atual,
+        operadora=operadora,
+    )
 
-        try:
-            res = await processar_uma_conta(email, password)
-            if res.get("ok"):
-                sucessos += 1
-                logger.info(">>> STATUS: OK (%d Sucessos / %d Falhas) <<<\n", sucessos, falhas)
-            else:
+    i = indice_inicial
+    fim_indice = indice_inicial + total_contas
+
+    try:
+        while modo_continuo or (i < fim_indice):
+            # 1. Checa se parada foi solicitada via arquivo de controle
+            stop_file = ACCOUNTS_DIR / ".stop_usina"
+            if stop_file.exists():
+                logger.info("🛑 [PARADA SOLICITADA] Comando de parada recebido via painel web ou celular.")
+                try:
+                    stop_file.unlink()
+                except Exception:
+                    pass
+                break
+
+            # 2. Checa se o celular / modem ADB continua conectado (Apenas se no PC via cabo USB)
+            if USE_PROXY_4G and not MODO_CELULAR:
+                conectado = garantir_adb_forward()
+                if not conectado:
+                    logger.warning("⚠️ [CONEXÃO ADB] Verificando se o celular foi desconectado...")
+                    await asyncio.sleep(2.5)
+                    if not garantir_adb_forward():
+                        logger.warning("🛑 [DESCONECTADO] O celular Moto G22 foi desconectado! Encerrando criação com segurança...")
+                        break
+
+            tempo_medio = round(sum(tempos_sucesso) / len(tempos_sucesso), 1) if tempos_sucesso else 41.5
+
+            # Checa comandos remotos pendentes enviados via Painel Web SixtySix
+            cmd = enviar_heartbeat(
+                status=status_usina,
+                contas_hoje=sucessos,
+                falhas_hoje=falhas,
+                tempo_medio=tempo_medio,
+                ultima_conta=ultima_conta,
+                ip=ip_atual,
+                operadora=operadora,
+            )
+
+            if cmd:
+                action = cmd.get("action") or cmd.get("command")
+                if action == "pause":
+                    status_usina = "paused"
+                    logger.info("⏸️ [CONTROLE REMOTO] Usina PAUSADA via painel web SixtySix.")
+                elif action == "resume":
+                    status_usina = "online"
+                    logger.info("▶️ [CONTROLE REMOTO] Usina RETOMADA via painel web SixtySix.")
+                elif action == "batch_20":
+                    fim_indice += 20
+                    logger.info("⚡ [CONTROLE REMOTO] +20 contas adicionadas à fila pelo painel! Total na fila: %d", fim_indice - indice_inicial)
+                elif action == "rotate_ip":
+                    logger.info("🔄 [CONTROLE REMOTO] Rotação imediata de IP solicitada pelo painel...")
+                    if USE_PROXY_4G:
+                        novo_ip = rotacionar_ip_4g()
+                        if novo_ip:
+                            ip_atual = novo_ip
+                            logger.info("📶 [CONTROLE REMOTO] Novo IP ativo: %s", ip_atual)
+
+            # Se estiver pausado pelo painel remoto, aguarda
+            if status_usina == "paused":
+                logger.info("⏸️ [STATUS: PAUSADO] Aguardando comando 'Retomar' no painel web...")
+                await asyncio.sleep(5.0)
+                continue
+
+            if USE_PROXY_4G and i > indice_inicial:
+                logger.info("✈️ [4G ROTACAO] Rotacionando IP via ADB para a próxima conta...")
+                novo_ip = rotacionar_ip_4g()
+                if novo_ip:
+                    ip_atual = novo_ip
+
+            email, password = gerar_email_e_senha(i)
+            logger.info("\n>>> INICIANDO CONTA %d/%d: %s <<<", i - indice_inicial + 1, fim_indice - indice_inicial, email)
+
+            try:
+                res = await processar_uma_conta(email, password)
+                if res.get("ok"):
+                    sucessos += 1
+                    dur = res.get("duration_seconds", 41.5)
+                    tempos_sucesso.append(dur)
+                    ultima_conta = email
+                    tempo_medio = round(sum(tempos_sucesso) / len(tempos_sucesso), 1)
+
+                    logger.info(">>> STATUS: OK (%d Sucessos / %d Falhas) <<<\n", sucessos, falhas)
+
+                    # Notificação Instantânea Verde no Discord
+                    notificar_discord_sucesso(
+                        email=email,
+                        tempo_segundos=dur,
+                        bridge_url=res.get("bridge_url", ""),
+                        projeto_id=res.get("project_id", ""),
+                        placar_ok=sucessos,
+                        placar_fail=falhas,
+                        operadora=operadora,
+                        ip=ip_atual,
+                    )
+
+                    conta_info = {
+                        "email": email,
+                        "password": res.get("password", ""),
+                        "token": res.get("workspace_id") or res.get("token") or "",
+                        "bridge_url": res.get("bridge_url", ""),
+                        "domain": email.split("@")[1] if "@" in email else "catch-all",
+                        "duration_seconds": dur,
+                        "created_at": datetime.now().isoformat(),
+                        "status": "online",
+                        "latency": round(dur * 10, 0),
+                        "is_robot": True,
+                    }
+
+                    # Telemetria atualizada em tempo real para o Painel Web SixtySix (banco de dados conectado)
+                    enviar_heartbeat(
+                        status="online",
+                        contas_hoje=sucessos,
+                        falhas_hoje=falhas,
+                        tempo_medio=tempo_medio,
+                        ultima_conta=ultima_conta,
+                        ip=ip_atual,
+                        operadora=operadora,
+                        conta=conta_info,
+                    )
+                else:
+                    falhas += 1
+                    logger.warning(">>> STATUS: FALHOU (%d Sucessos / %d Falhas) <<<\n", sucessos, falhas)
+                    notificar_discord_alerta(
+                        titulo=f"Falha na Conta {email}",
+                        detalhes="O processamento retornou ok=False.",
+                        ip=ip_atual,
+                        operadora=operadora,
+                    )
+            except Exception as exc:
                 falhas += 1
-                logger.warning(">>> STATUS: FALHOU (%d Sucessos / %d Falhas) <<<\n", sucessos, falhas)
-        except Exception as exc:
-            falhas += 1
-            logger.error(">>> ERRO NA CONTA %s: %s <<<", email, exc)
+                logger.error(">>> ERRO NA CONTA %s: %s <<<", email, exc)
+                notificar_discord_alerta(
+                    titulo=f"Exceção na Conta {email}",
+                    detalhes=str(exc),
+                    ip=ip_atual,
+                    operadora=operadora,
+                )
+                # Rotação preventiva após falha
+                if USE_PROXY_4G:
+                    logger.info("🔄 [FALHA] Acionando Modo Avião preventivo após erro...")
+                    novo_ip = rotacionar_ip_4g()
+                    if novo_ip:
+                        ip_atual = novo_ip
 
-        await asyncio.sleep(2.0)
+            i += 1
+            await asyncio.sleep(2.0)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("\n🛑 [PARADA SOLICITADA] Execução interrompida pelo usuário (Ctrl+C).")
+        logger.info("Sessão finalizada com segurança. Contas salvas: %d", sucessos)
 
     logger.info("==================================================================")
     logger.info("OPERACAO CONCLUIDA! Total OK: %d | Total Falhas: %d", sucessos, falhas)
