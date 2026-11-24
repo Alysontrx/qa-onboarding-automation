@@ -264,6 +264,15 @@ async def processar_uma_conta(
         except Exception:
             pass
 
+        # Garante que está no modo CADASTRO (Crie sua conta)
+        try:
+            signup_link = await page.query_selector("a[href*='signup'], button:has-text('Crie sua conta'), a:has-text('Crie sua conta')")
+            if signup_link:
+                await signup_link.click()
+                await asyncio.sleep(1.0)
+        except Exception:
+            pass
+
         # Preenche email
         email_inp = await page.wait_for_selector("input[type='email'], input[name='email']", timeout=12000)
         await email_inp.fill(email)
@@ -294,6 +303,7 @@ async def processar_uma_conta(
             await asyncio.sleep(0.5)
 
         if not turnstile_ok:
+            await page.screenshot(path="turnstile_local_debug.png")
             await browser.close()
             raise RuntimeError("Cloudflare Turnstile nao resolveu a tempo.")
 
@@ -694,11 +704,15 @@ async def main():
         indice_inicial = int(sys.argv[2])
     else:
         # Detecta automaticamente o próximo índice pelo arquivo de contas criadas
-        total_existentes = 0
+        import re
+        max_idx = 0
         if CONTAS_CRIADAS_FILE.exists():
             linhas = [l for l in CONTAS_CRIADAS_FILE.read_text(encoding="utf-8").splitlines() if l.strip()]
-            total_existentes = len(linhas)
-        indice_inicial = total_existentes + 1
+            for l in linhas:
+                m = re.search(r'\w+\.\w+(\d{2,5})@', l)
+                if m:
+                    max_idx = max(max_idx, int(m.group(1)))
+        indice_inicial = max(max_idx + 1, 91)
 
     logger.info("==================================================================")
     if modo_continuo:

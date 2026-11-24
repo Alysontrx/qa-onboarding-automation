@@ -568,7 +568,7 @@
       <div class="stat-box">
         <div class="stat-label">💰 Potencial Revenda</div>
         <div class="stat-number" style="color: #15803d;">R$ 4.900</div>
-        <div class="stat-foot">Base: R$ 50 / 1M Tokens</div>
+        <div class="stat-foot">75.000 Tokens por Conta Criada</div>
       </div>
     </section>
 
@@ -739,7 +739,13 @@
         const res = await fetch('http://184.107.166.91:8081', { signal: AbortSignal.timeout(3000) });
         if (!res.ok) return;
         const d = await res.json();
-        if (d.tokens_total) document.getElementById('tokens-val').textContent = d.tokens_total;
+        if (d.contas_hoje) {
+          const totalK = d.contas_hoje * 75;
+          const displayTokens = totalK >= 1000 ? (totalK / 1000).toFixed(2) + 'M' : totalK + 'k';
+          document.getElementById('tokens-val').textContent = displayTokens;
+        } else if (d.tokens_total) {
+          document.getElementById('tokens-val').textContent = d.tokens_total;
+        }
         if (d.contas_hoje) {
           document.getElementById('contas-val').textContent = d.contas_hoje;
           document.getElementById('table-count').textContent = d.contas_hoje + ' nós conectados';
