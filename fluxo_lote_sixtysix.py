@@ -47,7 +47,7 @@ LOGS_DIR = BASE_DIR / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 FLUXO_LOG_FILE = LOGS_DIR / "fluxo_lote.log"
 
-BRIDGES_FILE = BASE_DIR.parent / "sixtysix-site" / "integrations" / "lovable-test" / "bridges.txt"
+BRIDGES_FILE = Path(r"C:\Users\Alysson\sixtysix-pool-engine\data\bridges.txt")
 
 logger = logging.getLogger("sixtysix_lote")
 logger.setLevel(logging.INFO)
